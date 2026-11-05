@@ -1,0 +1,13 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <SelectDialog id="batchValueHelpDialog"
+        title="{i18n>batchValueHelp}"
+        noDataText="{i18n>noBatches}"
+        items="{batches>/items}"
+        search=".onBatchSearch"
+        confirm=".onBatchConfirm"
+        cancel=".onBatchCancel">
+        <StandardListItem id="batchValueHelpItem" title="{batches>batch}"/>
+    </SelectDialog>
+</core:FragmentDefinition>

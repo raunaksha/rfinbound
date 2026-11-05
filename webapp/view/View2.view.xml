@@ -1,0 +1,140 @@
+<mvc:View
+    controllerName="com.ewm.zrfinbound.controller.View2"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Page id="productPage"
+        title="{i18n>deliveryTitle} {view>/delivery}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+        <content>
+            <form:SimpleForm id="barcodeForm"
+                class="zrfLeftLabels"
+                editable="true"
+                layout="ResponsiveGridLayout"
+                labelSpanXL="2" labelSpanL="3" labelSpanM="3" labelSpanS="5"
+                adjustLabelSpan="false"
+                emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                columnsXL="1" columnsL="1" columnsM="1"
+                singleContainerFullSize="false">
+                <form:content>
+                    <Label id="barcodeLabel" text="{i18n>barcode}" labelFor="barcodeInput"/>
+                    <Input id="barcodeInput"
+                        value="{view>/barcode}"
+                        placeholder="{i18n>scanProductPlaceholder}"
+                        showValueHelp="true"
+                        valueHelpIconSrc="sap-icon://bar-code"
+                        valueHelpRequest=".onScanPress"
+                        submit=".onBarcodeSubmit"/>
+                </form:content>
+            </form:SimpleForm>
+
+            <ObjectHeader id="itemHeader"
+                visible="{= !!${view>/deliveryItem} }"
+                responsive="true"
+                backgroundDesign="Solid"
+                title="{view>/product}"
+                number="{view>/quantity}"
+                numberUnit="{view>/unit}">
+                <attributes>
+                    <ObjectAttribute id="itemHeaderProduct" title="{i18n>product}" text="{view>/product}"/>
+                    <ObjectAttribute id="itemHeaderItem" title="{i18n>deliveryItem}" text="{view>/delivery} / {view>/deliveryItem}"/>
+                    <ObjectAttribute id="itemHeaderPlant" title="{i18n>plant}" text="{view>/plant}" visible="{= !!${view>/plant} }"/>
+                    <ObjectAttribute id="itemHeaderSerialProfile" title="{i18n>serialProfile}" text="{view>/serialProfile}" visible="{= !!${view>/serialProfile} }"/>
+                </attributes>
+            </ObjectHeader>
+
+            <form:SimpleForm id="productForm"
+                class="zrfLeftLabels"
+                title="{i18n>transactionData}"
+                editable="true"
+                layout="ResponsiveGridLayout"
+                labelSpanXL="2" labelSpanL="3" labelSpanM="3" labelSpanS="5"
+                adjustLabelSpan="false"
+                emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                columnsXL="1" columnsL="1" columnsM="1"
+                singleContainerFullSize="false">
+                <form:content>
+                    <Label id="productLabel" text="{i18n>product}" required="true"/>
+                    <Input id="productInput"
+                        value="{view>/product}"
+                        change=".onProductChange"
+                        valueState="{view>/productState}"
+                        valueStateText="{= ${view>/productState} === 'Error' ? ${i18n>productRequired} : ${view>/productStateText} }"/>
+
+                    <Label id="sledLabel" text="{i18n>sled}"/>
+                    <Input id="sledInput" value="{view>/sled}" maxLength="6" placeholder="{i18n>sledFormat}"/>
+
+                    <Label id="batchLabel" text="{i18n>batch}"/>
+                    <Input id="batchInput"
+                        value="{view>/batch}"
+                        showValueHelp="true"
+                        valueHelpRequest=".onBatchValueHelp"/>
+
+                    <Label id="quantityLabel" text="{i18n>quantity}" required="true"/>
+                    <Input id="quantityInput"
+                        type="Number"
+                        description="{view>/unit}"
+                        value="{view>/quantity}"
+                        valueState="{view>/quantityState}"
+                        valueStateText="{i18n>quantityRequired}"/>
+
+                    <Label id="serialNumberLabel" text="{i18n>serialNumber}" required="{= !!${view>/serialProfile} }"/>
+                    <Input id="serialNumberInput"
+                        value="{ path: 'view>/serialNumbers', formatter: '.formatSerialNumbers' }"
+                        placeholder="{= ${view>/serialProfile} || ${view>/serialProfileBusy} || !${view>/deliveryItem} ? ${i18n>serialNumberPlaceholder} : ${i18n>serialNumberNotAllowed} }"
+                        enabled="{= !!${view>/serialProfile} }"
+                        showValueHelp="true"
+                        valueHelpOnly="true"
+                        valueHelpIconSrc="sap-icon://navigation-right-arrow"
+                        valueHelpRequest=".onSerialNumberPress"/>
+
+                    <Label id="huLabel" text="{i18n>hu}"/>
+                    <CheckBox id="huCheckBox"
+                        selected="{view>/huSelected}"
+                        select=".onHuSelect"/>
+
+                    <Label id="packMaterialLabel" text="{i18n>packMaterial}" visible="{view>/huSelected}"/>
+                    <ComboBox id="packMaterialInput"
+                        selectedKey="{view>/packMaterial}"
+                        visible="{view>/huSelected}"
+                        items="{ path: 'packMat>/Packaging_Material', templateShareable: false }">
+                        <core:ListItem key="{packMat>Product}" text="{packMat>Product}" additionalText="{packMat>ProductDescription}"/>
+                    </ComboBox>
+
+                    <Label id="huNumberLabel" text="{i18n>huNumber}" visible="{view>/huSelected}"/>
+                    <Input id="huNumberInput" value="{view>/hu}" visible="{view>/huSelected}"/>
+                </form:content>
+            </form:SimpleForm>
+
+            <Panel id="itemPanel"
+                expandable="true"
+                expanded="false"
+                headerText="{i18n>deliveryItems} ({= ${items>/items}.length })">
+                <List id="itemList"
+                    noDataText="{i18n>noItems}"
+                    busy="{items>/busy}"
+                    items="{items>/items}">
+                    <StandardListItem id="itemListItem"
+                        type="Active"
+                        press=".onItemPress"
+                        title="{items>Product}"
+                        description="{i18n>deliveryItem} {items>InboundDeliveryItem}"
+                        info="{items>ActualDeliveryQuantity} {items>DeliveryQuantityUnit}"/>
+                </List>
+            </Panel>
+        </content>
+        <footer>
+            <OverflowToolbar id="productFooter">
+                <Button id="saveButton"
+                    text="{i18n>save}"
+                    type="Emphasized"
+                    press=".onSave"
+                    enabled="{= !${view>/saving} }"/>
+                <ToolbarSpacer id="productFooterSpacer"/>
+                <Button id="clearButton" text="{i18n>clear}" press=".onClear"/>
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

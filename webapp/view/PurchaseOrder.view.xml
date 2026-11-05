@@ -1,0 +1,28 @@
+<mvc:View
+    controllerName="com.ewm.zrfinbound.controller.PurchaseOrder"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+    <Page id="purchaseOrderPage"
+        title="{i18n>purchaseOrderTitle} {view>/purchaseOrder}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+        <content>
+            <List id="deliveryList"
+                headerText="{ path: 'view>/deliveries', formatter: '.formatListHeader' }"
+                noDataText="{i18n>noDeliveries}"
+                busy="{view>/busy}"
+                items="{view>/deliveries}">
+                <ObjectListItem id="deliveryListItem"
+                    type="Navigation"
+                    press=".onDeliveryPress"
+                    title="{view>InboundDelivery}"
+                    number="{view>itemCount}"
+                    numberUnit="{i18n>itemCount}">
+                    <attributes>
+                        <ObjectAttribute id="deliveryPlantAttr" title="{i18n>plant}" text="{view>Plant}" visible="{= !!${view>Plant} }"/>
+                    </attributes>
+                </ObjectListItem>
+            </List>
+        </content>
+    </Page>
+</mvc:View>

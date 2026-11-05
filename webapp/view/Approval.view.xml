@@ -1,0 +1,126 @@
+<mvc:View
+    controllerName="com.ewm.zrfinbound.controller.Approval"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+    <Page id="approvalPage"
+        title="{i18n>approvalTitle} {view>/delivery}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+        <content>
+            <Table id="entryTable"
+                busy="{view>/busy}"
+                busyIndicatorDelay="0"
+                noDataText="{i18n>noEntries}"
+                popinLayout="GridSmall"
+                mode="MultiSelect"
+                selectionChange=".onSelectionChange"
+                items="{view>/entries}">
+                <headerToolbar>
+                    <OverflowToolbar id="entryToolbar">
+                        <Title id="entryTitle" text="{i18n>entries} ({= ${view>/entries}.length })"/>
+                        <ToolbarSpacer id="entryToolbarSpacer"/>
+                        <Button id="confirmButton"
+                            text="{i18n>confirm}"
+                            icon="sap-icon://complete"
+                            press=".onConfirm"
+                            enabled="{= ${view>/selected} &gt; 0 &amp;&amp; !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>
+                        <Button id="confirmAllButton"
+                            text="{i18n>confirmAll}"
+                            icon="sap-icon://accept"
+                            press=".onConfirmAll"
+                            enabled="{= !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colProduct">
+                        <Text id="colProductText" text="{i18n>product}"/>
+                    </Column>
+                    <Column id="colDeliveryItem" minScreenWidth="Tablet" demandPopin="true">
+                        <Text id="colDeliveryItemText" text="{i18n>deliveryItem}"/>
+                    </Column>
+                    <Column id="colPurchaseDocument" minScreenWidth="Desktop" demandPopin="true">
+                        <Text id="colPurchaseDocumentText" text="{i18n>purchaseDocument}"/>
+                    </Column>
+                    <Column id="colSerialNumber" minScreenWidth="Tablet" demandPopin="true">
+                        <Text id="colSerialNumberText" text="{i18n>serialNumber}"/>
+                    </Column>
+                    <Column id="colBatch" minScreenWidth="Tablet" demandPopin="true">
+                        <Text id="colBatchText" text="{i18n>batch}"/>
+                    </Column>
+                    <Column id="colExpiryDate" minScreenWidth="Desktop" demandPopin="true">
+                        <Text id="colExpiryDateText" text="{i18n>expiryDate}"/>
+                    </Column>
+                    <Column id="colHuFlag" hAlign="Center" minScreenWidth="Desktop" demandPopin="true">
+                        <Text id="colHuFlagText" text="{i18n>hu}"/>
+                    </Column>
+                    <Column id="colHu" minScreenWidth="Desktop" demandPopin="true">
+                        <Text id="colHuText" text="{i18n>huNumber}"/>
+                    </Column>
+                    <Column id="colPackMaterial" minScreenWidth="Desktop" demandPopin="true">
+                        <Text id="colPackMaterialText" text="{i18n>packMaterial}"/>
+                    </Column>
+                    <Column id="colQuantity" hAlign="End">
+                        <Text id="colQuantityText" text="{i18n>quantity}"/>
+                    </Column>
+                    <Column id="colConfirmedBy" minScreenWidth="Large" demandPopin="true">
+                        <Text id="colConfirmedByText" text="{i18n>confirmedBy}"/>
+                    </Column>
+                    <Column id="colGrNumber" minScreenWidth="Large" demandPopin="true">
+                        <Text id="colGrNumberText" text="{i18n>grNumber}"/>
+                    </Column>
+                    <Column id="colGrDoneBy" minScreenWidth="Large" demandPopin="true">
+                        <Text id="colGrDoneByText" text="{i18n>grDoneBy}"/>
+                    </Column>
+                    <Column id="colCreated" minScreenWidth="XLarge" demandPopin="true">
+                        <Text id="colCreatedText" text="{i18n>created}"/>
+                    </Column>
+                    <Column id="colLastChanged" minScreenWidth="XLarge" demandPopin="true">
+                        <Text id="colLastChangedText" text="{i18n>lastChanged}"/>
+                    </Column>
+                    <Column id="colConfirmed" hAlign="Center" width="6rem">
+                        <Text id="colConfirmedText" text="{i18n>receivingComplete}" wrapping="true"/>
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem id="entryItem">
+                        <cells>
+                            <ObjectIdentifier id="entryProduct" title="{view>Product}"/>
+                            <Text id="entryDeliveryItem" text="{view>InboundDelivery} / {view>InboundDeliveryItem}"/>
+                            <Text id="entryPurchaseDocument" text="{view>PurchaseDocument}"/>
+                            <Text id="entrySerialNumber" text="{view>SerialNumber}"/>
+                            <Text id="entryBatch" text="{view>Batch}"/>
+                            <Text id="entryExpiryDate" text="{ path: 'view>ExpiryDate', formatter: '.formatDate' }"/>
+                            <CheckBox id="entryHuFlag" selected="{= ${view>HuFlag} === 'X' }" displayOnly="true"/>
+                            <Text id="entryHu" text="{view>HandlingUnit}"/>
+                            <Text id="entryPackMaterial" text="{view>PackagingMaterial}"/>
+                            <ObjectNumber id="entryQuantity" number="{view>Quantity}" unit="{view>QuantityUOM}"/>
+                            <Text id="entryConfirmedBy" text="{view>ReceivingConfirmationBy}"/>
+                            <Text id="entryGrNumber" text="{view>GoodsReceiptNo}"/>
+                            <Text id="entryGrDoneBy" text="{view>GoodsReceiptDoneBy}"/>
+                            <ObjectAttribute id="entryCreated"
+                                title="{view>CreatedBy}"
+                                text="{ path: 'view>CreatedAt', formatter: '.formatDateTime' }"/>
+                            <ObjectAttribute id="entryLastChanged"
+                                title="{view>LastChangedBy}"
+                                text="{ path: 'view>LastChangedAt', formatter: '.formatDateTime' }"/>
+                            <ObjectStatus id="entryConfirmed"
+                                text="{ parts: ['view>ReceivingComplete', 'view>GoodsReceiptDoneBy', 'view>GoodsReceiptNo'], formatter: '.formatStatusText' }"
+                                state="{ parts: ['view>ReceivingComplete', 'view>GoodsReceiptDoneBy', 'view>GoodsReceiptNo'], formatter: '.formatStatusState' }"/>
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+        <footer>
+            <OverflowToolbar id="approvalFooter">
+                <Button id="postGrButton"
+                    text="{i18n>postGr}"
+                    type="Emphasized"
+                    press=".onPostGR"
+                    enabled="{= ${view>/canPost} &amp;&amp; !${view>/busy} &amp;&amp; !${view>/posting} }"/>
+                <ToolbarSpacer id="approvalFooterSpacer"/>
+                <Button id="refreshButton" text="{i18n>refresh}" icon="sap-icon://refresh" press=".onRefresh"/>
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

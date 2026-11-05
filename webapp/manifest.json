@@ -1,0 +1,293 @@
+{
+  "_version": "1.86.0",
+  "sap.app": {
+    "id": "com.ewm.zrfinbound",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "sourceTemplate": {
+      "id": "@sap/generator-fiori:basic",
+      "version": "1.31.1",
+      "toolsId": "d6a99ee1-1c7d-440a-b0a3-816357c0c326"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/sap/opu/odata4/sap/zsb_hu_rf/srvd_a2x/sap/zsd_handlingunit_rf/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "localUri": "localService/mainService/metadata.xml",
+          "odataVersion": "4.0"
+        }
+      },
+      "productSerialisationService": {
+        "uri": "/sap/opu/odata4/sap/zsb_product_serialisation/srvd_a2x/sap/zsd_product_serialisation/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "localUri": "localService/productSerialisationService/metadata.xml",
+          "odataVersion": "4.0"
+        }
+      },
+      "productGtinService": {
+        "uri": "/sap/opu/odata4/sap/zsb_product_ean/srvd_a2x/sap/zsd_product_ean/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "localUri": "localService/productGtinService/metadata.xml",
+          "odataVersion": "4.0"
+        }
+      },
+      "packagingMaterialService": {
+        "uri": "/sap/opu/odata4/sap/zsb_product_packagingmaterial/srvd_a2x/sap/zsd_packaging_material/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "localUri": "localService/packagingMaterialService/metadata.xml",
+          "odataVersion": "4.0"
+        }
+      },
+      "productBatchService": {
+        "uri": "/sap/opu/odata4/sap/zsb_product_batch/srvd_a2x/sap/zsd_product_batch/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "rfHuInboundService": {
+        "uri": "/sap/opu/odata4/sap/zapi_rf_hu_inbound_o4/srvd_a2x/sap/zapi_rf_hu_inbound_o4/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "localUri": "localService/rfHuInboundService/metadata.xml",
+          "odataVersion": "4.0"
+        }
+      },
+      "ewmOperationsService": {
+        "uri": "/sap/bc/http/sap/zewm_inbdelv_operations",
+        "type": "JSON"
+      },
+      "handlingUnitCreateService": {
+        "uri": "/sap/bc/http/sap/zhu_create",
+        "type": "JSON"
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "zrfinbound-display": {
+          "semanticObject": "zrfinbound",
+          "action": "display",
+          "title": "{{zrfinbound-display.flpTitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.151.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {},
+        "sap.ndc": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "com.ewm.zrfinbound.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "serialisation": {
+        "dataSource": "productSerialisationService",
+        "settings": {
+          "operationMode": "Server"
+        }
+      },
+      "gtin": {
+        "dataSource": "productGtinService",
+        "settings": {
+          "operationMode": "Server"
+        }
+      },
+      "packMat": {
+        "dataSource": "packagingMaterialService",
+        "settings": {
+          "operationMode": "Server"
+        }
+      },
+      "batch": {
+        "dataSource": "productBatchService",
+        "settings": {
+          "operationMode": "Server"
+        }
+      },
+      "rfhu": {
+        "dataSource": "rfHuInboundService",
+        "settings": {
+          "operationMode": "Server"
+        }
+      },
+      "serial": {
+        "type": "sap.ui.model.json.JSONModel"
+      },
+      "productSerialisationService": {
+        "dataSource": "productSerialisationService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "productGtinService": {
+        "dataSource": "productGtinService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "packagingMaterialService": {
+        "dataSource": "packagingMaterialService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "rfHuInboundService": {
+        "dataSource": "rfHuInboundService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "resources": {
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "controlAggregation": "pages",
+        "controlId": "app",
+        "transition": "slide",
+        "type": "View",
+        "viewType": "XML",
+        "path": "com.ewm.zrfinbound.view",
+        "async": true,
+        "viewPath": "com.ewm.zrfinbound.view"
+      },
+      "routes": [
+        {
+          "name": "RouteView1",
+          "pattern": ":?query:",
+          "target": "TargetView1"
+        },
+        {
+          "name": "RouteView2",
+          "pattern": "delivery/{delivery}",
+          "target": "TargetView2"
+        },
+        {
+          "name": "RouteSerialNumbers",
+          "pattern": "serialNumbers",
+          "target": "TargetSerialNumbers"
+        },
+        {
+          "name": "RoutePurchaseOrder",
+          "pattern": "purchaseOrder/{purchaseOrder}",
+          "target": "TargetPurchaseOrder"
+        },
+        {
+          "name": "RouteDeliveryDetail",
+          "pattern": "purchaseOrder/{purchaseOrder}/delivery/{delivery}",
+          "target": "TargetView2"
+        },
+        {
+          "name": "RouteApproval",
+          "pattern": "approval/{delivery}",
+          "target": "TargetApproval"
+        }
+      ],
+      "targets": {
+        "TargetView1": {
+          "id": "View1",
+          "name": "View1"
+        },
+        "TargetView2": {
+          "id": "View2",
+          "name": "View2"
+        },
+        "TargetPurchaseOrder": {
+          "id": "PurchaseOrder",
+          "name": "PurchaseOrder"
+        },
+        "TargetSerialNumbers": {
+          "id": "SerialNumber",
+          "name": "SerialNumber"
+        },
+        "TargetApproval": {
+          "id": "Approval",
+          "name": "Approval"
+        }
+      }
+    },
+    "rootView": {
+      "viewName": "com.ewm.zrfinbound.view.App",
+      "type": "XML",
+      "id": "App",
+      "async": true
+    }
+  }
+}

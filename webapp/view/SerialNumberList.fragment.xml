@@ -1,0 +1,20 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog id="serialNumberListDialog"
+        title="{i18n>serialNumberList}"
+        contentWidth="20rem">
+        <content>
+            <List id="serialNumberList"
+                mode="Delete"
+                delete=".onListDelete"
+                noDataText="{i18n>noSerialNumbers}"
+                items="{view>/serialNumbers}">
+                <StandardListItem id="serialNumberListItem" title="{view>}"/>
+            </List>
+        </content>
+        <endButton>
+            <Button id="serialNumberListClose" text="{i18n>close}" press=".onListClose"/>
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

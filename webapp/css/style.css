@@ -1,0 +1,22 @@
+/* Enter your custom styles here */
+
+/* forms with this class show their labels left-aligned beside the fields, so the first letters line up;
+   the theme pushes them right by floating the label and justifying its inner flex box to the end */
+.zrfLeftLabels.sapUiSimpleForm .sapUiForm.sapUiFormLblColon .sapUiFormResGridCont > .sapUiFormElementLbl > .sapMLabel {
+    float: none;
+    text-align: start !important;
+}
+
+.zrfLeftLabels.sapUiSimpleForm .sapUiForm.sapUiFormLblColon .sapUiFormResGridCont > .sapUiFormElementLbl > .sapMLabel .sapMLabelInner {
+    justify-content: flex-start !important;
+}
+
+/* a fixed label column instead of the grid's percentage, so the field starts right after the label;
+   longer labels such as "Scan Inbound Delivery" wrap inside it */
+.zrfLeftLabels.sapUiSimpleForm .sapUiFormResGridCont.sapUiRespGrid > .sapUiFormElementLbl {
+    width: 9rem;
+}
+
+.zrfLeftLabels.sapUiSimpleForm .sapUiFormResGridCont.sapUiRespGrid > :not(.sapUiFormElementLbl) {
+    width: calc(100% - 9rem);
+}

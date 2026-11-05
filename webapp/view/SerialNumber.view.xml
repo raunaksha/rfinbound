@@ -1,0 +1,74 @@
+<mvc:View
+    controllerName="com.ewm.zrfinbound.controller.SerialNumber"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:form="sap.ui.layout.form">
+    <Page id="serialNumberPage"
+        title="{i18n>serialNumberTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+        <subHeader>
+            <OverflowToolbar id="snProgressToolbar">
+                <ObjectStatus id="snEnteredStatus"
+                    title="{i18n>entered}"
+                    text="{= ${view>/serialNumbers}.length }"
+                    state="Information"/>
+                <ToolbarSpacer id="snProgressSpacer"/>
+                <ObjectStatus id="snRemainingStatus"
+                    title="{i18n>remaining}"
+                    text="{= Math.max(${view>/quantity} - ${view>/serialNumbers}.length, 0) }"
+                    state="{= ${view>/quantity} - ${view>/serialNumbers}.length > 0 ? 'Warning' : 'Success' }"
+                    inverted="true"/>
+            </OverflowToolbar>
+        </subHeader>
+        <content>
+            <form:SimpleForm id="serialNumberForm"
+                class="zrfLeftLabels"
+                editable="true"
+                layout="ResponsiveGridLayout"
+                labelSpanXL="2" labelSpanL="3" labelSpanM="3" labelSpanS="5"
+                adjustLabelSpan="false"
+                emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                columnsXL="1" columnsL="1" columnsM="1"
+                singleContainerFullSize="false">
+                <form:content>
+                    <Label id="snProductLabel" text="{i18n>product}"/>
+                    <Input id="snProductInput" value="{view>/product}" editable="false"/>
+
+                    <Label id="snQuantityLabel" text="{i18n>quantityEntered}" wrapping="true"/>
+                    <Input id="snQuantityInput" value="{view>/quantity}" description="{view>/unit}" editable="false"/>
+
+                    <Label id="snSerialNumberLabel" text="{i18n>serialNumber}" labelFor="snSerialNumberInput"/>
+                    <Input id="snSerialNumberInput"
+                        value="{view>/serialNumber}"
+                        maxLength="18"
+                        placeholder="{i18n>serialNumberScanPlaceholder}"
+                        showValueHelp="true"
+                        valueHelpIconSrc="sap-icon://bar-code"
+                        valueHelpRequest=".onScanPress"
+                        valueState="{view>/serialNumberState}"
+                        valueStateText="{view>/serialNumberStateText}"
+                        change=".onSerialNumberSubmit"/>
+                </form:content>
+            </form:SimpleForm>
+
+            <List id="snEnteredList"
+                headerText="{i18n>serialNumberList}"
+                noDataText="{i18n>noSerialNumbers}"
+                mode="Delete"
+                delete=".onListDelete"
+                items="{view>/serialNumbers}">
+                <StandardListItem id="snEnteredListItem" title="{view>}" icon="sap-icon://bar-code"/>
+            </List>
+        </content>
+        <footer>
+            <OverflowToolbar id="serialNumberFooter">
+                <Button id="snDeleteButton" text="{i18n>delete}" icon="sap-icon://delete" press=".onDelete"/>
+                <Button id="snListButton" text="{i18n>list}" icon="sap-icon://list" press=".onList"/>
+                <ToolbarSpacer id="serialNumberFooterSpacer"/>
+                <Button id="snSaveButton" text="{i18n>save}" type="Emphasized" press=".onSave"/>
+                <Button id="snBackButton" text="{i18n>back}" press=".onNavBack"/>
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

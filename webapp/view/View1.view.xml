@@ -1,0 +1,51 @@
+<mvc:View controllerName="com.ewm.zrfinbound.controller.View1"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:form="sap.ui.layout.form">
+    <Page id="page" title="{i18n>title}" busy="{view>/busy}">
+        <content>
+            <form:SimpleForm id="scanForm"
+                class="zrfLeftLabels"
+                editable="true"
+                layout="ResponsiveGridLayout"
+                labelSpanXL="2" labelSpanL="3" labelSpanM="3" labelSpanS="5"
+                adjustLabelSpan="false"
+                emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                columnsXL="1" columnsL="1" columnsM="1"
+                singleContainerFullSize="false">
+                <form:content>
+                    <Label id="modeLabel" text="{i18n>mode}" labelFor="modeGroup"/>
+                    <RadioButtonGroup id="modeGroup" columns="2" selectedIndex="{view>/mode}" select=".onModeSelect">
+                        <buttons>
+                            <RadioButton id="serializationRadio" text="{i18n>serialization}"/>
+                            <RadioButton id="approvalRadio" text="{i18n>approve}"/>
+                        </buttons>
+                    </RadioButtonGroup>
+
+                    <Label id="poLabel" text="{i18n>scanPurchaseOrder}" labelFor="poInput" wrapping="true"/>
+                    <Input id="poInput"
+                        value="{view>/purchaseOrder}"
+                        valueState="{view>/purchaseOrderState}"
+                        valueStateText="{i18n>purchaseOrderRequired}"
+                        maxLength="10"
+                        showValueHelp="true"
+                        valueHelpIconSrc="sap-icon://bar-code"
+                        valueHelpRequest=".onPurchaseOrderScanPress"
+                        change=".onPurchaseOrderSubmit"
+                        submit=".onPurchaseOrderSubmit"/>
+
+                    <Label id="deliveryLabel" text="{i18n>scanDelivery}" labelFor="deliveryInput" wrapping="true"/>
+                    <Input id="deliveryInput"
+                        value="{view>/delivery}"
+                        valueState="{view>/deliveryState}"
+                        valueStateText="{i18n>deliveryRequired}"
+                        maxLength="10"
+                        showValueHelp="true"
+                        valueHelpIconSrc="sap-icon://bar-code"
+                        valueHelpRequest=".onDeliveryScanPress"
+                        submit=".onSubmit"/>
+                </form:content>
+            </form:SimpleForm>
+        </content>
+    </Page>
+</mvc:View>
