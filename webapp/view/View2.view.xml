@@ -69,7 +69,10 @@
                     <Label id="batchLabel" text="{i18n>batch}"/>
                     <Input id="batchInput"
                         value="{view>/batch}"
+                        valueState="{view>/batchState}"
+                        valueStateText="{view>/batchStateText}"
                         showValueHelp="true"
+                        valueHelpOnly="true"
                         valueHelpRequest=".onBatchValueHelp"/>
 
                     <Label id="quantityLabel" text="{i18n>quantity}" required="true"/>
@@ -131,7 +134,7 @@
                     text="{i18n>save}"
                     type="Emphasized"
                     press=".onSave"
-                    enabled="{= !${view>/saving} }"/>
+                    enabled="{= !${view>/saving} &amp;&amp; !${view>/grDocument} }"/>
                 <ToolbarSpacer id="productFooterSpacer"/>
                 <Button id="clearButton" text="{i18n>clear}" press=".onClear"/>
             </OverflowToolbar>

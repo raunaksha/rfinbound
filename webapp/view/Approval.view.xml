@@ -24,6 +24,12 @@
                             icon="sap-icon://complete"
                             press=".onConfirm"
                             enabled="{= ${view>/selected} &gt; 0 &amp;&amp; !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>
+                        <Button id="rejectButton"
+                            text="{i18n>reject}"
+                            icon="sap-icon://decline"
+                            type="Reject"
+                            press=".onReject"
+                            enabled="{= ${view>/selected} &gt; 0 &amp;&amp; !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>
                         <Button id="confirmAllButton"
                             text="{i18n>confirmAll}"
                             icon="sap-icon://accept"

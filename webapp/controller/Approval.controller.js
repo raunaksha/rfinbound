@@ -6,8 +6,9 @@ sap.ui.define([
     "sap/m/MessageBox",
     "sap/ui/core/format/DateFormat",
     "com/ewm/zrfinbound/model/rfHuInbound",
-    "com/ewm/zrfinbound/model/ewmOperations"
-], (Controller, JSONModel, MessageToast, MessageBox, DateFormat, rfHuInbound, ewmOperations) => {
+    "com/ewm/zrfinbound/model/ewmOperations",
+    "com/ewm/zrfinbound/model/inboundDelivery"
+], (Controller, JSONModel, MessageToast, MessageBox, DateFormat, rfHuInbound, ewmOperations, inboundDelivery) => {
     "use strict";
 
     return Controller.extend("com.ewm.zrfinbound.controller.Approval", {
@@ -161,6 +162,38 @@ sap.ui.define([
             this._confirm(aIndexes, true);
         },
 
+        // rejected entries are deleted, so the item can be received again on the delivery screen
+        onReject() {
+            const oTable = this.byId("entryTable");
+            const oModel = this.getView().getModel("view");
+            const aIndexes = oTable.getSelectedItems()
+                .map((oItem) => Number(oItem.getBindingContext("view").getPath().split("/").pop()))
+                .filter((iIndex) => {
+                    const oEntry = oModel.getProperty("/entries/" + iIndex);
+                    return !this.formatPosted(oEntry.GoodsReceiptDoneBy, oEntry.GoodsReceiptNo);
+                });
+            if (!aIndexes.length) {
+                MessageToast.show(this._getText("selectionPosted"));
+                return;
+            }
+            const sReject = this._getText("reject");
+            MessageBox.confirm(this._getText("rejectConfirm", [aIndexes.length]), {
+                actions: [sReject, MessageBox.Action.CANCEL],
+                emphasizedAction: sReject,
+                onClose: (sAction) => {
+                    if (sAction !== sReject) {
+                        return;
+                    }
+                    oModel.setProperty("/busy", true);
+                    rfHuInbound.deleteEntries(aIndexes.map((iIndex) => this._aContexts[iIndex])).then(() => {
+                        MessageToast.show(this._getText("entriesRejected", [aIndexes.length]));
+                    }, (oError) => {
+                        MessageBox.error(this._getText("rejectError", [oError.message || ""]));
+                    }).finally(() => this._loadEntries());
+                }
+            });
+        },
+
         onConfirmAll() {
             const aIndexes = [];
             this.getView().getModel("view").getProperty("/entries").forEach((oEntry, iIndex) => {
@@ -210,11 +243,34 @@ sap.ui.define([
             // only the confirmed entries are written to the warehouse items and marked as posted
             const aIndexes = this._getConfirmedIndexes();
             const aEntries = aIndexes.map((iIndex) => oModel.getProperty("/entries/" + iIndex));
+            const aItems = this._groupByItem(aEntries);
             oModel.setProperty("/posting", true);
+
+            // an item that has a quantity and serial numbers in the delivery is posted already,
+            // so neither serial numbers are assigned nor the goods receipt is posted
+            Promise.all(aItems.map((oItem) => inboundDelivery.readSerialNumberStatus(oComponent, sDelivery, oItem.item)
+                .then((oStatus) => oStatus.quantity > 0 && oStatus.serialNumbers > 0 ? oItem.item : "")))
+                .then((aPostedItems) => {
+                    const aPosted = aPostedItems.filter(Boolean);
+                    if (aPosted.length) {
+                        oModel.setProperty("/posting", false);
+                        MessageBox.error(this._getText("pgrAlreadyExists", [sDelivery, aPosted.join(", ")]));
+                        return;
+                    }
+                    this._postGR(sDelivery, aIndexes, aItems);
+                }, (oError) => {
+                    oModel.setProperty("/posting", false);
+                    MessageBox.error(this._getText("pgrCheckError", [oError.message || ""]));
+                });
+        },
+
+        _postGR(sDelivery, aIndexes, aItems) {
+            const oModel = this.getView().getModel("view");
+            const oComponent = this.getOwnerComponent();
 
             // write batch and quantity to the warehouse items one after the other and assign their serial numbers,
             // then post the whole delivery
-            const pItemsUpdated = this._groupByItem(aEntries).reduce((pPrevious, oItem) => pPrevious
+            const pItemsUpdated = aItems.reduce((pPrevious, oItem) => pPrevious
                 .then(() => ewmOperations.updateItem(oComponent, sDelivery, oItem.item, {
                     batch: oItem.batch,
                     quantity: oItem.quantity,

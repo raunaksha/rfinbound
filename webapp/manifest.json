@@ -69,6 +69,10 @@
           "odataVersion": "4.0"
         }
       },
+      "inboundDelvSerialNumService": {
+        "uri": "/sap/opu/odata/sap/YY1_INBOUND_DELV_SERIALNUM_CDS/",
+        "type": "JSON"
+      },
       "ewmOperationsService": {
         "uri": "/sap/bc/http/sap/zewm_inbdelv_operations",
         "type": "JSON"

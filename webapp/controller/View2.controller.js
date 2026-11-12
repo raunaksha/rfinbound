@@ -25,6 +25,9 @@ sap.ui.define([
         unit: "",
         sled: "",
         batch: "",
+        batchState: "None",
+        batchStateText: "",
+        grDocument: "",
         quantity: "",
         quantityState: "None",
         saving: false,
@@ -132,6 +135,7 @@ sap.ui.define([
             const oModel = this.getView().getModel("view");
             oModel.setData(Object.assign({ delivery: oModel.getProperty("/delivery") }, createItem(), { product: sProduct }));
             this._bBatchScanned = false;
+            this._oBatches = null;
         },
 
         _findDeliveryItem() {
@@ -174,8 +178,39 @@ sap.ui.define([
                 oModel.setProperty("/batch", oItem.Batch);
             }
             this._focus("quantityInput");
+            this._checkGrPosted(oItem);
             this._loadSerialNumberProfile(oItem);
             this._loadSavedEntries(oItem);
+        },
+
+        // an item with a posted goods receipt cannot be received again
+        _readGrDocument(oItem) {
+            const oModel = this.getView().getModel("view");
+            return inboundDelivery.readGrDocument(this.getOwnerComponent().getModel(),
+                rfHuInbound.deliveryNumber(oModel.getProperty("/delivery")), rfHuInbound.itemNumber(oItem.InboundDeliveryItem));
+        },
+
+        _showGrPosted(oItem, sGrDocument) {
+            const oModel = this.getView().getModel("view");
+            MessageBox.error(this._getText("grAlreadyPosted", [oModel.getProperty("/delivery"),
+                rfHuInbound.itemNumber(oItem.InboundDeliveryItem), sGrDocument]), {
+                onClose: () => this.onClear()
+            });
+        },
+
+        _checkGrPosted(oItem) {
+            const oModel = this.getView().getModel("view");
+            this._readGrDocument(oItem).then((sGrDocument) => {
+                // ignore the answer when another product was scanned in the meantime
+                if (!sGrDocument || oModel.getProperty("/deliveryItem") !== oItem.InboundDeliveryItem) {
+                    return;
+                }
+                oModel.setProperty("/grDocument", sGrDocument);
+                this._showGrPosted(oItem, sGrDocument);
+            }, (oError) => {
+                // the check is repeated on save, so a failed read only gets logged here
+                Log.warning("Goods receipt check failed", oError.message, "com.ewm.zrfinbound.controller.View2");
+            });
         },
 
         // an item saved before shows its saved values, so editing the delivery starts from them
@@ -297,8 +332,7 @@ sap.ui.define([
                 oDialog.getBinding("items").filter([]);
                 oDialog.setBusy(true);
                 oDialog.open();
-                return product.readBatches(this.getOwnerComponent().getModel("batch"), sProduct,
-                    oModel.getProperty("/plant") || "").then((aBatches) => {
+                return this._readBatches(sProduct, oModel.getProperty("/plant") || "").then((aBatches) => {
                     oBatches.setProperty("/items", aBatches.map((sBatch) => ({ batch: sBatch })));
                 }, (oError) => {
                     MessageBox.error(this._getText("batchReadError", [oError.message || ""]));
@@ -314,13 +348,59 @@ sap.ui.define([
         onBatchConfirm(oEvent) {
             const oItem = oEvent.getParameter("selectedItem");
             if (oItem) {
-                this.getView().getModel("view").setProperty("/batch", oItem.getBindingContext("batches").getProperty("batch"));
+                const oModel = this.getView().getModel("view");
+                oModel.setProperty("/batch", oItem.getBindingContext("batches").getProperty("batch"));
+                oModel.setProperty("/batchState", "None");
             }
             this._focus("quantityInput");
         },
 
         onBatchCancel() {
             this._focus("batchInput");
+        },
+
+        // the batches are read once per product and plant, for the value help and the check on save
+        _readBatches(sProduct, sPlant) {
+            const sKey = sProduct + "|" + sPlant;
+            if (!this._oBatches || this._oBatches.key !== sKey) {
+                const oBatches = {
+                    key: sKey,
+                    promise: product.readBatches(this.getOwnerComponent().getModel("batch"), sProduct, sPlant)
+                };
+                // a failed read is tried again next time
+                oBatches.promise.catch(() => {
+                    if (this._oBatches === oBatches) {
+                        this._oBatches = null;
+                    }
+                });
+                this._oBatches = oBatches;
+            }
+            return this._oBatches.promise;
+        },
+
+        // the batch has to be one of the value help, also when it was scanned or taken from the delivery item;
+        // a product with batches cannot be saved without one
+        _checkBatch(oData, oItem) {
+            const oModel = this.getView().getModel("view");
+            const sBatch = (oData.batch || "").trim();
+
+            return this._readBatches(oItem.Product, oItem.Plant || "").then((aBatches) => {
+                let sError = "";
+                if (sBatch && !aBatches.includes(sBatch)) {
+                    sError = this._getText("batchInvalid", [sBatch, oItem.Product]);
+                } else if (!sBatch && aBatches.length) {
+                    sError = this._getText("batchRequired", [oItem.Product]);
+                }
+                oModel.setProperty("/batchState", sError ? "Error" : "None");
+                oModel.setProperty("/batchStateText", sError);
+                if (sError) {
+                    MessageBox.error(sError);
+                }
+                return !sError;
+            }, (oError) => {
+                MessageBox.error(this._getText("batchReadError", [oError.message || ""]));
+                return false;
+            });
         },
 
         _getText(sKey, aArgs) {
@@ -420,6 +500,28 @@ sap.ui.define([
                 return;
             }
 
+            oModel.setProperty("/saving", true);
+            this._readGrDocument(oItem).then((sGrDocument) => {
+                if (sGrDocument) {
+                    oModel.setProperty("/grDocument", sGrDocument);
+                    this._showGrPosted(oItem, sGrDocument);
+                    return false;
+                }
+                return this._checkBatch(oData, oItem);
+            }, (oError) => {
+                MessageBox.error(this._getText("grCheckError", [oError.message || ""]));
+                return false;
+            }).then((bValid) => {
+                if (bValid) {
+                    this._createEntries(oData, oItem);
+                } else {
+                    oModel.setProperty("/saving", false);
+                }
+            });
+        },
+
+        _createEntries(oData, oItem) {
+            const oModel = this.getView().getModel("view");
             const oEntry = {
                 InboundDelivery: rfHuInbound.deliveryNumber(oData.delivery),
                 InboundDeliveryItem: rfHuInbound.itemNumber(oItem.InboundDeliveryItem),
@@ -438,7 +540,6 @@ sap.ui.define([
                 : [Object.assign({}, oEntry, { Quantity: String(oData.quantity), SerialNumber: "" })];
 
             // only the entries are created in the custom table; quantity and batch go to the EWM item when the goods receipt is posted
-            oModel.setProperty("/saving", true);
             rfHuInbound.createEntries(this.getOwnerComponent().getModel("rfhu"), aEntries).then(() => {
                 oModel.setProperty("/saving", false);
                 MessageToast.show(this._getText("itemSaved", [oItem.Product, oData.delivery]));

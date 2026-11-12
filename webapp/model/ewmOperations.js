@@ -134,7 +134,7 @@ sap.ui.define([], function () {
         postGoodsReceipt: function (oComponent, sDelivery) {
             return send(oComponent, "ewmOperationsService", "POST", {
                 Operation: "POST_GR",
-                EWMDelivery: deliveryNumber(sDelivery)
+                ewm_delivery: deliveryNumber(sDelivery)
             });
         },
 
