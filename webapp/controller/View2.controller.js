@@ -301,6 +301,7 @@ sap.ui.define([
                 returning: true,
                 saved: false
             });
+            this._blurActive();
             this.getOwnerComponent().getRouter().navTo("RouteSerialNumbers");
         },
 
@@ -409,10 +410,25 @@ sap.ui.define([
 
         _focus(sId) {
             // RF guns type into the focused field, so keep the cursor there
-            setTimeout(() => this.byId(sId).focus(), 0);
+            setTimeout(() => {
+                // Don't pull focus back into this view once we've navigated away
+                const oDomRef = this.getView().getDomRef();
+                if (oDomRef && !oDomRef.closest("[aria-hidden='true']")) {
+                    this.byId(sId).focus();
+                }
+            }, 0);
+        },
+
+        _blurActive() {
+            // Release focus before the view is hidden, otherwise the browser
+            // blocks aria-hidden on the outgoing page (focus retained warning)
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
+            }
         },
 
         onNavBack() {
+            this._blurActive();
             const oRouter = this.getOwnerComponent().getRouter();
             if (this._sPurchaseOrder) {
                 oRouter.navTo("RoutePurchaseOrder", { purchaseOrder: this._sPurchaseOrder }, true);

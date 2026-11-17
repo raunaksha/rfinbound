@@ -1,0 +1,42 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog id="postGrProgressDialog"
+        title="{i18n>postGrProgressTitle} {progress>/delivery}"
+        contentWidth="24rem"
+        escapeHandler=".onPostGRProgressEscape">
+        <content>
+            <VBox id="postGrProgressBox" class="sapUiSmallMargin">
+                <ProgressIndicator id="postGrProgressBar"
+                    percentValue="{progress>/percent}"
+                    displayValue="{progress>/displayValue}"
+                    state="{progress>/state}"
+                    showValue="true"
+                    width="100%"/>
+                <HBox id="postGrProgressStatusBox" alignItems="Center" class="sapUiTinyMarginTop">
+                    <BusyIndicator id="postGrProgressBusy"
+                        size="1rem"
+                        visible="{progress>/running}"
+                        class="sapUiTinyMarginEnd"/>
+                    <ObjectStatus id="postGrProgressStatus"
+                        text="{progress>/statusText}"
+                        state="{progress>/state}"/>
+                </HBox>
+            </VBox>
+            <List id="postGrProgressList" items="{progress>/steps}" showSeparators="Inner">
+                <StandardListItem id="postGrProgressStep"
+                    title="{progress>title}"
+                    description="{progress>description}"
+                    icon="{ path: 'progress>status', formatter: '.formatStepIcon' }"
+                    info="{ path: 'progress>status', formatter: '.formatStepText' }"
+                    infoState="{ path: 'progress>status', formatter: '.formatStepState' }"/>
+            </List>
+        </content>
+        <endButton>
+            <Button id="postGrProgressClose"
+                text="{i18n>close}"
+                enabled="{= !${progress>/running} }"
+                press=".onPostGRProgressClose"/>
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

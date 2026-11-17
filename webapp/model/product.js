@@ -76,19 +76,48 @@ sap.ui.define([], function () {
         },
 
         /**
-         * Reads the serial number profile of a product in a plant. Read by filter, as a key read fails
-         * for products without serialisation.
-         * @param {sap.ui.model.odata.v4.ODataModel} oModel The product serialisation service model.
+         * Reads the serial number profile of a product in a plant. The service is read by key, as in
+         * product_serialisation(Product='TENSI%2B%20SERIAL',Plant='PL01'); when the key read finds nothing,
+         * a filter read is tried as well.
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel The model of the service with product_serialisation.
          * @param {string} sProduct The product.
          * @param {string} sPlant The plant.
          * @returns {Promise<string>} The serial number profile, empty when the product is not serialised.
          */
         readSerialNumberProfile: function (oModel, sProduct, sPlant) {
-            return oModel.bindList("/product_serialisation", undefined, undefined, undefined, {
-                $filter: "Product eq " + literal(sProduct) + " and Plant eq " + literal(sPlant),
-                $select: "Product,Plant,SerialNumberProfile"
-            }).requestContexts(0, 1).then(function (aContexts) {
-                return aContexts.length ? aContexts[0].getProperty("SerialNumberProfile") || "" : "";
+            var sSelect = "?$select=Product,Plant,SerialNumberProfile";
+            var sKeyUrl = oModel.getServiceUrl() + "product_serialisation(Product="
+                + encodeURIComponent(literal(sProduct)) + ",Plant=" + encodeURIComponent(literal(sPlant)) + ")" + sSelect;
+            var sFilterUrl = oModel.getServiceUrl() + "product_serialisation" + sSelect + "&$filter="
+                + encodeURIComponent("Product eq " + literal(sProduct) + " and Plant eq " + literal(sPlant));
+
+            // a product without serialisation may answer the key read with 404, that means no profile
+            function read(sUrl) {
+                return fetch(sUrl, {
+                    credentials: "same-origin",
+                    headers: { "Accept": "application/json" }
+                }).then(function (oResponse) {
+                    if (oResponse.status === 404) {
+                        return {};
+                    }
+                    if (!oResponse.ok) {
+                        throw new Error(oResponse.status + " " + oResponse.statusText);
+                    }
+                    return oResponse.json();
+                }).then(function (oData) {
+                    var oEntry = Array.isArray(oData.value) ? oData.value[0] : oData;
+                    return (oEntry && oEntry.SerialNumberProfile) || "";
+                });
+            }
+
+            return read(sKeyUrl).then(function (sProfile) {
+                return sProfile || read(sFilterUrl).catch(function () {
+                    return "";
+                });
+            }, function (oError) {
+                return read(sFilterUrl).catch(function () {
+                    throw oError;
+                });
             });
         }
     };

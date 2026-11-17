@@ -6,9 +6,8 @@ sap.ui.define([
     "sap/m/MessageBox",
     "sap/ui/core/format/DateFormat",
     "com/ewm/zrfinbound/model/rfHuInbound",
-    "com/ewm/zrfinbound/model/ewmOperations",
-    "com/ewm/zrfinbound/model/inboundDelivery"
-], (Controller, JSONModel, MessageToast, MessageBox, DateFormat, rfHuInbound, ewmOperations, inboundDelivery) => {
+    "com/ewm/zrfinbound/model/ewmOperations"
+], (Controller, JSONModel, MessageToast, MessageBox, DateFormat, rfHuInbound, ewmOperations) => {
     "use strict";
 
     return Controller.extend("com.ewm.zrfinbound.controller.Approval", {
@@ -22,6 +21,7 @@ sap.ui.define([
                 canPost: false,
                 selected: 0
             }), "view");
+            this.getView().setModel(new JSONModel({ steps: [], running: false }), "progress");
             this._aContexts = [];
 
             this.getOwnerComponent().getRouter().getRoute("RouteApproval")
@@ -233,7 +233,6 @@ sap.ui.define([
         onPostGR() {
             const oModel = this.getView().getModel("view");
             const sDelivery = oModel.getProperty("/delivery");
-            const oComponent = this.getOwnerComponent();
 
             this._updateCanPost();
             if (!oModel.getProperty("/canPost")) {
@@ -245,60 +244,165 @@ sap.ui.define([
             const aEntries = aIndexes.map((iIndex) => oModel.getProperty("/entries/" + iIndex));
             const aItems = this._groupByItem(aEntries);
             oModel.setProperty("/posting", true);
-
-            // an item that has a quantity and serial numbers in the delivery is posted already,
-            // so neither serial numbers are assigned nor the goods receipt is posted
-            Promise.all(aItems.map((oItem) => inboundDelivery.readSerialNumberStatus(oComponent, sDelivery, oItem.item)
-                .then((oStatus) => oStatus.quantity > 0 && oStatus.serialNumbers > 0 ? oItem.item : "")))
-                .then((aPostedItems) => {
-                    const aPosted = aPostedItems.filter(Boolean);
-                    if (aPosted.length) {
-                        oModel.setProperty("/posting", false);
-                        MessageBox.error(this._getText("pgrAlreadyExists", [sDelivery, aPosted.join(", ")]));
-                        return;
-                    }
-                    this._postGR(sDelivery, aIndexes, aItems);
-                }, (oError) => {
-                    oModel.setProperty("/posting", false);
-                    MessageBox.error(this._getText("pgrCheckError", [oError.message || ""]));
-                });
+            this._postGR(sDelivery, aIndexes, aItems);
         },
 
-        _postGR(sDelivery, aIndexes, aItems) {
+        // one step per delivery item (quantity, batch and its serial numbers) and one for the goods receipt
+        _openPostGRProgress(sDelivery, aItems) {
+            const iTotal = aItems.reduce((iSum, oItem) => iSum + 1 + oItem.serialNumbers.length, 0) + 1;
+            const oProgress = this.getView().getModel("progress");
+            oProgress.setData({
+                delivery: sDelivery,
+                done: 0,
+                total: iTotal,
+                percent: 0,
+                displayValue: this._getText("postGrProgressValue", [0, iTotal]),
+                state: "None",
+                running: true,
+                statusText: "",
+                steps: aItems.map((oItem) => ({
+                    title: this._getText("postGrProgressItem", [oItem.item]),
+                    description: this._itemStepText(oItem, 0),
+                    status: "pending"
+                })).concat({
+                    title: this._getText("postGrProgressGr", [sDelivery]),
+                    description: "",
+                    status: "pending"
+                })
+            });
+            if (!this._pProgressDialog) {
+                this._pProgressDialog = this.loadFragment({ name: "com.ewm.zrfinbound.view.PostGRProgress" });
+            }
+            return this._pProgressDialog.then((oDialog) => oDialog.open());
+        },
+
+        _itemStepText(oItem, iAssigned) {
+            const sQuantity = oItem.quantity + " " + (oItem.unit || "");
+            return oItem.serialNumbers.length
+                ? this._getText("postGrProgressItemSerials", [sQuantity, iAssigned, oItem.serialNumbers.length])
+                : this._getText("postGrProgressItemQuantity", [sQuantity]);
+        },
+
+        _setStep(iStep, mValues, sStatusText) {
+            const oProgress = this.getView().getModel("progress");
+            Object.keys(mValues).forEach((sKey) => oProgress.setProperty("/steps/" + iStep + "/" + sKey, mValues[sKey]));
+            if (sStatusText) {
+                oProgress.setProperty("/statusText", sStatusText);
+            }
+        },
+
+        _advanceProgress() {
+            const oProgress = this.getView().getModel("progress");
+            const iDone = oProgress.getProperty("/done") + 1;
+            const iTotal = oProgress.getProperty("/total");
+            oProgress.setProperty("/done", iDone);
+            oProgress.setProperty("/percent", Math.round(iDone / iTotal * 100));
+            oProgress.setProperty("/displayValue", this._getText("postGrProgressValue", [iDone, iTotal]));
+        },
+
+        _finishProgress(sState, sStatusText) {
+            const oProgress = this.getView().getModel("progress");
+            oProgress.setProperty("/running", false);
+            oProgress.setProperty("/state", sState);
+            oProgress.setProperty("/statusText", sStatusText);
+        },
+
+        // write batch and quantity to the warehouse items one after the other and assign their serial numbers,
+        // then post the whole delivery; the progress dialog shows each step
+        async _postGR(sDelivery, aIndexes, aItems) {
             const oModel = this.getView().getModel("view");
             const oComponent = this.getOwnerComponent();
+            const iGrStep = aItems.length;
+            let iStep = 0;
 
-            // write batch and quantity to the warehouse items one after the other and assign their serial numbers,
-            // then post the whole delivery
-            const pItemsUpdated = aItems.reduce((pPrevious, oItem) => pPrevious
-                .then(() => ewmOperations.updateItem(oComponent, sDelivery, oItem.item, {
-                    batch: oItem.batch,
-                    quantity: oItem.quantity,
-                    unit: oItem.unit
-                }))
-                .then(() => oItem.serialNumbers.reduce((pSerial, sSerialNumber) => pSerial
-                    .then(() => ewmOperations.assignSerialNumber(oComponent, sDelivery, oItem.item, sSerialNumber)
-                        .catch((oError) => {
+            await this._openPostGRProgress(sDelivery, aItems);
+            try {
+                for (; iStep < aItems.length; iStep++) {
+                    const oItem = aItems[iStep];
+                    this._setStep(iStep, { status: "running" }, this._getText("postGrProgressUpdating", [oItem.item]));
+                    try {
+                        await ewmOperations.updateItem(oComponent, sDelivery, oItem.item, {
+                            batch: oItem.batch,
+                            quantity: oItem.quantity,
+                            unit: oItem.unit
+                        });
+                    } catch (oError) {
+                        throw new Error(this._getText("itemUpdateError", [oError.message || ""]));
+                    }
+                    this._advanceProgress();
+
+                    for (let iSerial = 0; iSerial < oItem.serialNumbers.length; iSerial++) {
+                        const sSerialNumber = oItem.serialNumbers[iSerial];
+                        this._setStep(iStep, {}, this._getText("postGrProgressAssigning",
+                            [oItem.item, sSerialNumber, iSerial + 1, oItem.serialNumbers.length]));
+                        try {
+                            await ewmOperations.assignSerialNumber(oComponent, sDelivery, oItem.item, sSerialNumber);
+                        } catch (oError) {
                             throw new Error(this._getText("serialAssignError", [sSerialNumber, oError.message || ""]));
-                        })), Promise.resolve())), Promise.resolve());
+                        }
+                        this._setStep(iStep, { description: this._itemStepText(oItem, iSerial + 1) });
+                        this._advanceProgress();
+                    }
+                    this._setStep(iStep, { status: "done" });
+                }
 
-            pItemsUpdated.then(() => ewmOperations.postGoodsReceipt(oComponent, sDelivery).catch((oError) => {
-                throw new Error(this._getText("grPostError", [sDelivery, oError.message || ""]));
-            }), (oError) => {
-                throw new Error(this._getText("itemUpdateError", [oError.message || ""]));
-            }).then(() => {
+                this._setStep(iGrStep, { status: "running" }, this._getText("postGrProgressPosting", [sDelivery]));
+                try {
+                    await ewmOperations.postGoodsReceipt(oComponent, sDelivery);
+                } catch (oError) {
+                    throw new Error(this._getText("grPostError", [sDelivery, oError.message || ""]));
+                }
+                this._setStep(iGrStep, { status: "done" });
+                this._advanceProgress();
+            } catch (oError) {
+                // the failed step is marked, the following ones stay waiting
+                this._setStep(Math.min(iStep, iGrStep), { status: "error", description: oError.message });
+                this._finishProgress("Error", oError.message);
                 oModel.setProperty("/posting", false);
-                oModel.setProperty("/posted", true);
-                this._updateCanPost();
-                MessageToast.show(this._getText("grPosted", [sDelivery]));
-                // the posting is marked on the entries only when the launchpad user is known
-                rfHuInbound.getUserId().then((sUser) => sUser && this._updateEntries(
-                    aIndexes, { GoodsReceiptDoneBy: sUser }))
-                    .catch((oError) => MessageBox.error(this._getText("grDoneByError", [oError.message || ""])));
-            }, (oError) => {
-                oModel.setProperty("/posting", false);
-                MessageBox.error(oError.message);
-            });
+                return;
+            }
+
+            this._finishProgress("Success", this._getText("grPosted", [sDelivery]));
+            oModel.setProperty("/posting", false);
+            oModel.setProperty("/posted", true);
+            this._updateCanPost();
+            // the posting is marked on the entries only when the launchpad user is known
+            rfHuInbound.getUserId().then((sUser) => sUser && this._updateEntries(
+                aIndexes, { GoodsReceiptDoneBy: sUser }))
+                .catch((oError) => MessageBox.error(this._getText("grDoneByError", [oError.message || ""])));
+        },
+
+        formatStepIcon(sStatus) {
+            return {
+                running: "sap-icon://synchronize",
+                done: "sap-icon://sys-enter-2",
+                error: "sap-icon://error"
+            }[sStatus] || "sap-icon://pending";
+        },
+
+        formatStepText(sStatus) {
+            return this._getText({
+                running: "postGrStepRunning",
+                done: "postGrStepDone",
+                error: "postGrStepError"
+            }[sStatus] || "postGrStepPending");
+        },
+
+        formatStepState(sStatus) {
+            return { running: "Information", done: "Success", error: "Error" }[sStatus] || "None";
+        },
+
+        // the dialog stays open while posting, so the steps are not interrupted
+        onPostGRProgressEscape(oPromise) {
+            if (this.getView().getModel("progress").getProperty("/running")) {
+                oPromise.reject();
+            } else {
+                oPromise.resolve();
+            }
+        },
+
+        onPostGRProgressClose() {
+            this.byId("postGrProgressDialog").close();
         },
 
         onRefresh() {

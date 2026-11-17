@@ -25,33 +25,6 @@
           "odataVersion": "4.0"
         }
       },
-      "productSerialisationService": {
-        "uri": "/sap/opu/odata4/sap/zsb_product_serialisation/srvd_a2x/sap/zsd_product_serialisation/0001/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "localUri": "localService/productSerialisationService/metadata.xml",
-          "odataVersion": "4.0"
-        }
-      },
-      "productGtinService": {
-        "uri": "/sap/opu/odata4/sap/zsb_product_ean/srvd_a2x/sap/zsd_product_ean/0001/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "localUri": "localService/productGtinService/metadata.xml",
-          "odataVersion": "4.0"
-        }
-      },
-      "packagingMaterialService": {
-        "uri": "/sap/opu/odata4/sap/zsb_product_packagingmaterial/srvd_a2x/sap/zsd_packaging_material/0001/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "localUri": "localService/packagingMaterialService/metadata.xml",
-          "odataVersion": "4.0"
-        }
-      },
       "productBatchService": {
         "uri": "/sap/opu/odata4/sap/zsb_product_batch/srvd_a2x/sap/zsd_product_batch/0001/",
         "type": "OData",
@@ -69,13 +42,13 @@
           "odataVersion": "4.0"
         }
       },
-      "inboundDelvSerialNumService": {
-        "uri": "/sap/opu/odata/sap/YY1_INBOUND_DELV_SERIALNUM_CDS/",
-        "type": "JSON"
-      },
       "ewmOperationsService": {
-        "uri": "/sap/bc/http/sap/zewm_inbdelv_operations",
-        "type": "JSON"
+        "uri": "/sap/opu/odata4/sap/zsb_ewm_inb_delv_ops/srvd_a2x/sap/zsd_ewm_inbd_delv_ops/0001/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       },
       "handlingUnitCreateService": {
         "uri": "/sap/bc/http/sap/zhu_create",
@@ -131,7 +104,9 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "com.ewm.zrfinbound.i18n.i18n"
+          "bundleName": "com.ewm.zrfinbound.i18n.i18n",
+          "supportedLocales": [""],
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -143,74 +118,22 @@
           "earlyRequests": true
         }
       },
-      "serialisation": {
-        "dataSource": "productSerialisationService",
-        "settings": {
-          "operationMode": "Server"
-        }
-      },
-      "gtin": {
-        "dataSource": "productGtinService",
-        "settings": {
-          "operationMode": "Server"
-        }
-      },
-      "packMat": {
-        "dataSource": "packagingMaterialService",
-        "settings": {
-          "operationMode": "Server"
-        }
-      },
       "batch": {
         "dataSource": "productBatchService",
         "settings": {
-          "operationMode": "Server"
+          "operationMode": "Server",
+          "earlyRequests": true
         }
       },
       "rfhu": {
         "dataSource": "rfHuInboundService",
         "settings": {
-          "operationMode": "Server"
+          "operationMode": "Server",
+          "earlyRequests": true
         }
       },
       "serial": {
         "type": "sap.ui.model.json.JSONModel"
-      },
-      "productSerialisationService": {
-        "dataSource": "productSerialisationService",
-        "preload": true,
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
-        }
-      },
-      "productGtinService": {
-        "dataSource": "productGtinService",
-        "preload": true,
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
-        }
-      },
-      "packagingMaterialService": {
-        "dataSource": "packagingMaterialService",
-        "preload": true,
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
-        }
-      },
-      "rfHuInboundService": {
-        "dataSource": "rfHuInboundService",
-        "preload": true,
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
-        }
       }
     },
     "resources": {

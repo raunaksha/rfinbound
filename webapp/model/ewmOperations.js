@@ -1,13 +1,104 @@
 sap.ui.define([], function () {
     "use strict";
 
-    // the operations service only answers POST and PATCH, so the CSRF token is fetched from the RF HU service
-    var pToken = null;
+    // the operations service is called with GET, the operation and its values passed as $filter
+    var ENTITY_SET = "EWM_DELV_POST_PATCH";
 
     function manifestUri(oComponent, sDataSource) {
         return oComponent.getManifestObject().resolveUri(
             oComponent.getManifestEntry("/sap.app/dataSources/" + sDataSource + "/uri"));
     }
+
+    function literal(sValue) {
+        return "'" + String(sValue === undefined || sValue === null ? "" : sValue).replace(/'/g, "''") + "'";
+    }
+
+    // the operations service keeps the EWM delivery with leading zeros and the item without, e.g. 0180000046 and 40
+    function deliveryNumber(sDelivery) {
+        return String(sDelivery).trim().padStart(10, "0");
+    }
+
+    function itemNumber(sItem) {
+        return String(sItem).trim().replace(/^0+(?=.)/, "");
+    }
+
+    // a date as Edm.Date literal, e.g. 2026-12-30, from a Date or a string that already is one
+    function dateLiteral(vDate) {
+        if (vDate instanceof Date) {
+            return vDate.getFullYear() + "-" + String(vDate.getMonth() + 1).padStart(2, "0") + "-"
+                + String(vDate.getDate()).padStart(2, "0");
+        }
+        return String(vDate).trim();
+    }
+
+    // the result fields may come in any case, e.g. Success or success
+    function field(oResult, sName) {
+        var sKey = Object.keys(oResult || {}).find(function (sCandidate) {
+            return sCandidate.toLowerCase() === sName.toLowerCase();
+        });
+        return sKey ? oResult[sKey] : undefined;
+    }
+
+    function messages(oError) {
+        return [oError.message].concat((oError.details || []).map(function (oDetail) {
+            return oDetail.message;
+        })).filter(function (sMessage, iIndex, aMessages) {
+            return sMessage && aMessages.indexOf(sMessage) === iIndex;
+        }).join("\n");
+    }
+
+    // the service may only say "API modification failed", the EWM error and its details come as JSON text in Response
+    function errorMessage(oResult) {
+        var oError;
+        try {
+            oError = JSON.parse(field(oResult, "Response")).error;
+        } catch {
+            oError = null;
+        }
+        return oError && oError.message ? messages(oError) : field(oResult, "Message");
+    }
+
+    function failed(oResult) {
+        var vSuccess = field(oResult, "Success");
+        return vSuccess === false || vSuccess === "" || String(vSuccess).toLowerCase() === "false"
+            || Number(field(oResult, "HttpStatus")) >= 400;
+    }
+
+    function send(oComponent, mValues) {
+        var sFilter = Object.keys(mValues).map(function (sName) {
+            return sName + " eq " + mValues[sName];
+        }).join(" and ");
+        var sUrl = manifestUri(oComponent, "ewmOperationsService") + ENTITY_SET + "?$filter="
+            + encodeURIComponent(sFilter);
+
+        return fetch(sUrl, {
+            credentials: "same-origin",
+            headers: { "Accept": "application/json" }
+        }).then(function (oResponse) {
+            return oResponse.text().then(function (sText) {
+                var oData = {};
+                try {
+                    oData = sText ? JSON.parse(sText) : {};
+                } catch {
+                    oData = { Message: sText };
+                }
+                if (!oResponse.ok) {
+                    throw new Error((oData.error && messages(oData.error)) || errorMessage(oData)
+                        || oResponse.status + " " + oResponse.statusText);
+                }
+                // the answer is the list of results, usually one
+                var aResults = Array.isArray(oData.value) ? oData.value : [oData];
+                var oFailed = aResults.find(failed);
+                if (oFailed) {
+                    throw new Error(errorMessage(oFailed) || oResponse.status + " " + oResponse.statusText);
+                }
+                return aResults[0] || {};
+            });
+        });
+    }
+
+    // the handling unit service only answers POST, so the CSRF token is fetched from the RF HU service
+    var pToken = null;
 
     function fetchToken(oComponent) {
         if (!pToken) {
@@ -25,42 +116,14 @@ sap.ui.define([], function () {
         return pToken;
     }
 
-    // the operations service keeps the EWM delivery with leading zeros and the item without, e.g. 0180000046 and 40
-    function deliveryNumber(sDelivery) {
-        return String(sDelivery).padStart(10, "0");
-    }
-
-    function itemNumber(sItem) {
-        return String(sItem).replace(/^0+(?=.)/, "");
-    }
-
-    // the service only says "API modification failed", the EWM error and its details come as JSON text in Response
-    function errorMessage(oResult) {
-        var oError;
-        try {
-            oError = JSON.parse(oResult.Response).error;
-        } catch {
-            oError = null;
-        }
-        if (!oError || !oError.message) {
-            return oResult.Message;
-        }
-        return [oError.message].concat((oError.details || []).map(function (oDetail) {
-            return oDetail.message;
-        })).filter(function (sMessage, iIndex, aMessages) {
-            return sMessage && aMessages.indexOf(sMessage) === iIndex;
-        }).join("\n");
-    }
-
-    function send(oComponent, sDataSource, sMethod, oBody, mHeaders, bRetried) {
+    function post(oComponent, sDataSource, oBody, mHeaders, bRetried) {
         return fetchToken(oComponent).then(function (sToken) {
             return fetch(manifestUri(oComponent, sDataSource), {
-                method: sMethod,
+                method: "POST",
                 credentials: "same-origin",
                 headers: Object.assign({
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "If-Match": "*",
                     "X-CSRF-Token": sToken
                 }, mHeaders),
                 body: JSON.stringify(oBody)
@@ -70,7 +133,7 @@ sap.ui.define([], function () {
             if (oResponse.status === 403 && !bRetried
                 && (oResponse.headers.get("X-CSRF-Token") || "").toLowerCase() === "required") {
                 pToken = null;
-                return send(oComponent, sDataSource, sMethod, oBody, mHeaders, true);
+                return post(oComponent, sDataSource, oBody, mHeaders, true);
             }
             return oResponse.text().then(function (sText) {
                 var oResult = {};
@@ -79,7 +142,7 @@ sap.ui.define([], function () {
                 } catch {
                     oResult = { Message: sText };
                 }
-                if (!oResponse.ok || oResult.Success === false || oResult.HttpStatus >= 400) {
+                if (!oResponse.ok || failed(oResult)) {
                     throw new Error(errorMessage(oResult) || oResponse.status + " " + oResponse.statusText);
                 }
                 return oResult;
@@ -87,7 +150,6 @@ sap.ui.define([], function () {
         });
     }
 
-    /* eslint-disable camelcase -- the operations service expects these field names */
     return {
         /**
          * Writes quantity, unit and batch to an EWM inbound delivery item.
@@ -98,13 +160,13 @@ sap.ui.define([], function () {
          * @returns {Promise<object>} The service's answer.
          */
         updateItem: function (oComponent, sDelivery, sItem, oValues) {
-            return send(oComponent, "ewmOperationsService", "PATCH", {
-                operation: "UPDATE_ITEM",
-                ewm_delivery: deliveryNumber(sDelivery),
-                ewm_item: itemNumber(sItem),
-                Product_Quantity: Number(oValues.quantity),
-                Quantity_Unit: oValues.unit,
-                Batch: oValues.batch || ""
+            return send(oComponent, {
+                Operation: literal("UPDATE_ITEM"),
+                EwmDelivery: literal(deliveryNumber(sDelivery)),
+                EwmItem: literal(itemNumber(sItem)),
+                ProductQuantity: String(Number(oValues.quantity) || 0),
+                QuantityUnit: literal(oValues.unit),
+                Batch: literal(oValues.batch)
             });
         },
 
@@ -117,11 +179,11 @@ sap.ui.define([], function () {
          * @returns {Promise<object>} The service's answer.
          */
         assignSerialNumber: function (oComponent, sDelivery, sItem, sSerialNumber) {
-            return send(oComponent, "ewmOperationsService", "POST", {
-                operation: "ASSIGN_SERIAL",
-                ewm_delivery: deliveryNumber(sDelivery),
-                ewm_item: itemNumber(sItem),
-                Serial_Number: sSerialNumber
+            return send(oComponent, {
+                Operation: literal("ASSIGN_SERIAL"),
+                EwmDelivery: literal(deliveryNumber(sDelivery)),
+                EwmItem: literal(itemNumber(sItem)),
+                SerialNumber: literal(sSerialNumber)
             });
         },
 
@@ -132,21 +194,41 @@ sap.ui.define([], function () {
          * @returns {Promise<object>} The service's answer.
          */
         postGoodsReceipt: function (oComponent, sDelivery) {
-            return send(oComponent, "ewmOperationsService", "POST", {
-                Operation: "POST_GR",
-                ewm_delivery: deliveryNumber(sDelivery)
+            return send(oComponent, {
+                Operation: literal("POST_GR"),
+                EwmDelivery: literal(deliveryNumber(sDelivery))
             });
         },
 
         /**
-         * Creates a handling unit. Only pack material and HU number are entered, the rest is hardcoded for now.
+         * Creates a batch of a material.
+         * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
+         * @param {string} sMaterial The material.
+         * @param {string} sPlant The plant, may be empty.
+         * @param {string} sBatch The batch number.
+         * @param {Date|string} vShelfLifeExpiry The shelf life expiry date, a Date or YYYY-MM-DD.
+         * @returns {Promise<object>} The service's answer.
+         */
+        createBatch: function (oComponent, sMaterial, sPlant, sBatch, vShelfLifeExpiry) {
+            return send(oComponent, {
+                Operation: literal("CREATE_BATCH"),
+                Material: literal(sMaterial),
+                Plant: literal(sPlant),
+                Batch: literal(sBatch),
+                ShelfLifeExpiry: dateLiteral(vShelfLifeExpiry)
+            });
+        },
+
+        /**
+         * Creates a handling unit. Only pack material and HU number are entered, the warehouse is always UK02
+         * and the rest is hardcoded for now.
          * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
          * @param {string} sPackagingMaterial The pack material.
          * @param {string} sHandlingUnit The HU number.
          * @returns {Promise<object>} The service's answer.
          */
         createHandlingUnit: function (oComponent, sPackagingMaterial, sHandlingUnit) {
-            return send(oComponent, "handlingUnitCreateService", "POST", {
+            return post(oComponent, "handlingUnitCreateService", {
                 Warehouse: "UK02",
                 HandlingUnitExternalID: sHandlingUnit,
                 PackagingMaterial: sPackagingMaterial,
@@ -174,5 +256,4 @@ sap.ui.define([], function () {
             }, { "x-operation": "CREATE_HU" });
         }
     };
-    /* eslint-enable camelcase */
 });

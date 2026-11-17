@@ -92,7 +92,7 @@ sap.ui.define([], function () {
          */
         readGrDocument: function (oModel, sDelivery, sDeliveryItem) {
             var sFilter = "inbound_delv eq " + literal(sDelivery) + " and inbound_delv_item eq " + literal(sDeliveryItem);
-            var sUrl = oModel.getServiceUrl() + "ZCE_INBOUND_PGR?$filter=" + encodeURIComponent(sFilter);
+            var sUrl = oModel.getServiceUrl() + "Inbound_Delv_PGR?$filter=" + encodeURIComponent(sFilter);
 
             return fetch(sUrl, {
                 credentials: "same-origin",
@@ -107,40 +107,6 @@ sap.ui.define([], function () {
                     return oEntry.pgr_documnet;
                 });
                 return oPgr ? oPgr.pgr_documnet : "";
-            });
-        },
-
-        /**
-         * Reads quantity and number of serial numbers of an inbound delivery item from the serial number
-         * service (OData V2). Serial numbers next to a quantity mean the goods receipt was posted already.
-         * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URL.
-         * @param {string} sDelivery The inbound delivery, with or without leading zeros.
-         * @param {string} sDeliveryItem The inbound delivery item, with or without leading zeros.
-         * @returns {Promise<{quantity: number, serialNumbers: number}>} Zeros when the item is not found.
-         */
-        readSerialNumberStatus: function (oComponent, sDelivery, sDeliveryItem) {
-            // the service takes the delivery without leading zeros and the item with six digits, e.g. 180000077 and 000010
-            var sItem = String(sDeliveryItem).trim().replace(/^0+(?=.)/, "").padStart(6, "0");
-            var sFilter = "InboundDelivery eq " + literal(String(sDelivery).trim().replace(/^0+(?=.)/, ""))
-                + " and InboundDeliveryItem eq " + literal(sItem);
-            var sUrl = oComponent.getManifestObject().resolveUri(
-                oComponent.getManifestEntry("/sap.app/dataSources/inboundDelvSerialNumService/uri"))
-                + "YY1_Inbound_Delv_SerialNum?$format=json&$filter=" + encodeURIComponent(sFilter);
-
-            return fetch(sUrl, {
-                credentials: "same-origin",
-                headers: { "Accept": "application/json" }
-            }).then(function (oResponse) {
-                if (!oResponse.ok) {
-                    throw new Error(oResponse.status + " " + oResponse.statusText);
-                }
-                return oResponse.json();
-            }).then(function (oData) {
-                return ((oData.d && oData.d.results) || []).reduce(function (oStatus, oEntry) {
-                    oStatus.quantity = Math.max(oStatus.quantity, Number(oEntry.ActualDeliveryQuantity) || 0);
-                    oStatus.serialNumbers += Number(oEntry.NumberOfSerialNumbers) || 0;
-                    return oStatus;
-                }, { quantity: 0, serialNumbers: 0 });
             });
         }
     };
