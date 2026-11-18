@@ -237,6 +237,27 @@ sap.ui.define([
             return Object.values(mItems);
         },
 
+        // the entries with the HU box ticked are packed after the goods receipt: entries with the same HU number
+        // go into one HU, entries without HU number get one HU per delivery item and pack material, numbered by the system
+        _groupHandlingUnits(aEntries) {
+            const mHus = {};
+            aEntries.filter((oEntry) => oEntry.HuFlag === "X").forEach((oEntry) => {
+                const sHu = (oEntry.HandlingUnit || "").trim();
+                const sPackMaterial = (oEntry.PackagingMaterial || "").trim();
+                const sKey = sHu ? "HU|" + sHu : "ITEM|" + oEntry.InboundDeliveryItem + "|" + sPackMaterial;
+                const oHu = mHus[sKey] || (mHus[sKey] = { hu: sHu, packMaterial: sPackMaterial, items: {} });
+                oHu.packMaterial = oHu.packMaterial || sPackMaterial;
+                const oItem = oHu.items[oEntry.InboundDeliveryItem] || (oHu.items[oEntry.InboundDeliveryItem] = {
+                    item: oEntry.InboundDeliveryItem,
+                    product: oEntry.Product,
+                    quantity: 0,
+                    unit: oEntry.QuantityUOM
+                });
+                oItem.quantity += Number(oEntry.Quantity) || 0;
+            });
+            return Object.values(mHus).map((oHu) => Object.assign(oHu, { items: Object.values(oHu.items) }));
+        },
+
         onPostGR() {
             const oModel = this.getView().getModel("view");
             const sDelivery = oModel.getProperty("/delivery");
@@ -250,13 +271,21 @@ sap.ui.define([
             const aIndexes = this._getConfirmedIndexes();
             const aEntries = aIndexes.map((iIndex) => oModel.getProperty("/entries/" + iIndex));
             const aItems = this._groupByItem(aEntries);
+            const aHus = this._groupHandlingUnits(aEntries);
+            const aMissing = aHus.filter((oHu) => !oHu.packMaterial);
+            if (aMissing.length) {
+                MessageBox.error(this._getText("huPackMaterialMissing", [aMissing.map((oHu) =>
+                    oHu.hu || oHu.items.map((oItem) => oItem.item).join(", ")).join(", ")]));
+                return;
+            }
             oModel.setProperty("/posting", true);
-            this._postGR(sDelivery, aIndexes, aItems);
+            this._postGR(sDelivery, aIndexes, aItems, aHus);
         },
 
-        // one step per delivery item (quantity, batch and its serial numbers) and one for the goods receipt
-        _openPostGRProgress(sDelivery, aItems) {
-            const iTotal = aItems.reduce((iSum, oItem) => iSum + 1 + oItem.serialNumbers.length, 0) + 1;
+        // one step per delivery item (quantity, batch and its serial numbers), one for the goods receipt
+        // and one per handling unit
+        _openPostGRProgress(sDelivery, aItems, aHus) {
+            const iTotal = aItems.reduce((iSum, oItem) => iSum + 1 + oItem.serialNumbers.length, 0) + 1 + aHus.length;
             const oProgress = this.getView().getModel("progress");
             oProgress.setData({
                 delivery: sDelivery,
@@ -275,12 +304,25 @@ sap.ui.define([
                     title: this._getText("postGrProgressGr", [sDelivery]),
                     description: "",
                     status: "pending"
-                })
+                }, aHus.map((oHu) => ({
+                    title: this._huTitle(oHu),
+                    description: this._huDescription(oHu),
+                    status: "pending"
+                })))
             });
             if (!this._pProgressDialog) {
                 this._pProgressDialog = this.loadFragment({ name: "com.ewm.zrfinbound.view.PostGRProgress" });
             }
             return this._pProgressDialog.then((oDialog) => oDialog.open());
+        },
+
+        _huTitle(oHu) {
+            return oHu.hu ? this._getText("postGrProgressHu", [oHu.hu]) : this._getText("postGrProgressNewHu");
+        },
+
+        _huDescription(oHu) {
+            return this._getText("postGrProgressHuItems", [oHu.packMaterial,
+                oHu.items.map((oItem) => oItem.item + " (" + oItem.quantity + " " + (oItem.unit || "") + ")").join(", ")]);
         },
 
         _itemStepText(oItem, iAssigned) {
@@ -315,14 +357,14 @@ sap.ui.define([
         },
 
         // write batch and quantity to the warehouse items one after the other and assign their serial numbers,
-        // then post the whole delivery; the progress dialog shows each step
-        async _postGR(sDelivery, aIndexes, aItems) {
+        // then post the whole delivery and pack the received stock into handling units; the progress dialog shows each step
+        async _postGR(sDelivery, aIndexes, aItems, aHus) {
             const oModel = this.getView().getModel("view");
             const oComponent = this.getOwnerComponent();
             const iGrStep = aItems.length;
             let iStep = 0;
 
-            await this._openPostGRProgress(sDelivery, aItems);
+            await this._openPostGRProgress(sDelivery, aItems, aHus);
             try {
                 for (; iStep < aItems.length; iStep++) {
                     const oItem = aItems[iStep];
@@ -369,14 +411,61 @@ sap.ui.define([
                 return;
             }
 
-            this._finishProgress("Success", this._getText("grPosted", [sDelivery]));
-            oModel.setProperty("/posting", false);
+            // the goods receipt is posted, so the entries are marked even when packing fails afterwards
             oModel.setProperty("/posted", true);
             this._updateCanPost();
             // the posting is marked on the entries only when the launchpad user is known
             rfHuInbound.getUserId().then((sUser) => sUser && this._updateEntries(
                 aIndexes, { GoodsReceiptDoneBy: sUser }))
                 .catch((oError) => MessageBox.error(this._getText("grDoneByError", [oError.message || ""])));
+
+            const iFailed = await this._createHandlingUnits(sDelivery, aHus, iGrStep + 1);
+            if (iFailed) {
+                this._finishProgress("Warning", this._getText("grPostedHuFailed", [sDelivery, iFailed, aHus.length]));
+            } else {
+                this._finishProgress("Success", aHus.length
+                    ? this._getText("grPostedWithHus", [sDelivery, aHus.length]) : this._getText("grPosted", [sDelivery]));
+            }
+            oModel.setProperty("/posting", false);
+        },
+
+        // packs the received stock into one handling unit after the other; a failed HU does not stop the others,
+        // as the goods receipt is posted already. Resolves with the number of failed HUs.
+        async _createHandlingUnits(sDelivery, aHus, iFirstStep) {
+            const oComponent = this.getOwnerComponent();
+            let iFailed = 0;
+
+            for (let iHu = 0; iHu < aHus.length; iHu++) {
+                const oHu = aHus[iHu];
+                const iStep = iFirstStep + iHu;
+                this._setStep(iStep, { status: "running" }, this._getText("postGrProgressCreatingHu", [this._huTitle(oHu)]));
+                try {
+                    const aItems = [];
+                    for (const oItem of oHu.items) {
+                        let sStockItemUUID;
+                        try {
+                            sStockItemUUID = await ewmOperations.readStockItemUUID(oComponent, oItem.product, sDelivery, oItem.item);
+                        } catch (oError) {
+                            throw new Error(this._getText("huStockReadError", [oItem.item, oError.message || ""]));
+                        }
+                        aItems.push(Object.assign({ stockItemUUID: sStockItemUUID, delivery: sDelivery }, oItem));
+                    }
+                    const oResult = await ewmOperations.createHandlingUnit(oComponent, oHu.packMaterial, oHu.hu, aItems);
+                    const sCreated = oHu.hu || (oResult && oResult.HandlingUnitExternalID) || "";
+                    this._setStep(iStep, {
+                        status: "done",
+                        title: sCreated ? this._getText("postGrProgressHu", [sCreated]) : this._huTitle(oHu)
+                    });
+                } catch (oError) {
+                    iFailed++;
+                    this._setStep(iStep, {
+                        status: "error",
+                        description: this._getText("huCreateError", [oError.message || ""])
+                    });
+                }
+                this._advanceProgress();
+            }
+            return iFailed;
         },
 
         formatStepIcon(sStatus) {

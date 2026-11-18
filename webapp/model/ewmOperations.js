@@ -4,6 +4,10 @@ sap.ui.define([], function () {
     // the operations service is called with GET, the operation and its values passed as $filter
     var ENTITY_SET = "EWM_DELV_POST_PATCH";
 
+    // handling units are created in the GR area of the one warehouse the app works for
+    var WAREHOUSE = "UK02";
+    var GR_STORAGE_BIN = "GR-AREA";
+
     function manifestUri(oComponent, sDataSource) {
         return oComponent.getManifestObject().resolveUri(
             oComponent.getManifestEntry("/sap.app/dataSources/" + sDataSource + "/uri"));
@@ -232,39 +236,74 @@ sap.ui.define([], function () {
         },
 
         /**
-         * Creates a handling unit. Only pack material and HU number are entered, the warehouse is always UK02
-         * and the rest is hardcoded for now.
+         * Reads the stock item UUID of a product in the GR area, by the inbound delivery item it was received with.
+         * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
+         * @param {string} sProduct The product.
+         * @param {string} sDelivery The inbound delivery.
+         * @param {string} sItem The inbound delivery item.
+         * @returns {Promise<string>} The stock item UUID; rejects when no stock is found.
+         */
+        readStockItemUUID: function (oComponent, sProduct, sDelivery, sItem) {
+            // the stock keeps delivery and item without leading zeros, e.g. 180000065 and 10
+            var sFilter = [
+                "EWMWarehouse eq " + literal(WAREHOUSE),
+                "Product eq " + literal(sProduct),
+                "EWMStockReferenceDocument eq " + literal(itemNumber(sDelivery)),
+                "EWMStockReferenceDocumentItem eq " + literal(itemNumber(sItem))
+            ].join(" and ");
+            var sUrl = manifestUri(oComponent, "mainService") + "stock_uuid?$filter=" + encodeURIComponent(sFilter);
+
+            return fetch(sUrl, {
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" }
+            }).then(function (oResponse) {
+                return oResponse.json().catch(function () {
+                    return {};
+                }).then(function (oData) {
+                    if (!oResponse.ok) {
+                        throw new Error((oData.error && messages(oData.error))
+                            || oResponse.status + " " + oResponse.statusText);
+                    }
+                    var oStock = (oData.value || []).find(function (oCandidate) {
+                        return oCandidate.StockItemUUID;
+                    });
+                    if (!oStock) {
+                        throw new Error("No stock found for product " + sProduct + " of delivery "
+                            + itemNumber(sDelivery) + " item " + itemNumber(sItem));
+                    }
+                    return oStock.StockItemUUID;
+                });
+            });
+        },
+
+        /**
+         * Creates a handling unit in the GR area of warehouse UK02 and packs the received stock into it.
          * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
          * @param {string} sPackagingMaterial The pack material.
-         * @param {string} sHandlingUnit The HU number.
+         * @param {string} sHandlingUnit The HU number, empty to let the system number it.
+         * @param {{stockItemUUID: string, quantity: number, unit: string, delivery: string, item: string}[]} aItems
+         *     The stock to pack, with the inbound delivery item it was received with.
          * @returns {Promise<object>} The service's answer.
          */
-        createHandlingUnit: function (oComponent, sPackagingMaterial, sHandlingUnit) {
+        createHandlingUnit: function (oComponent, sPackagingMaterial, sHandlingUnit, aItems) {
             return post(oComponent, "handlingUnitCreateService", {
-                Warehouse: "UK02",
-                HandlingUnitExternalID: sHandlingUnit,
+                Warehouse: WAREHOUSE,
+                HandlingUnitExternalID: sHandlingUnit || "",
                 PackagingMaterial: sPackagingMaterial,
-                StorageBin: "GR-AREA",
-                _HandlingUnitItem: [
-                    {
-                        Warehouse: "UK02",
-                        HandlingUnitExternalID: sHandlingUnit,
-                        StockItemUUID: "0f1b4d10-3dd7-1fd1-a5df-3720ad81763f",
-                        HandlingUnitQuantity: 1,
-                        HandlingUnitQuantityUnit: "PC",
-                        HandlingUnitAltUnitOfMeasure: "PC"
-                    },
-                    {
-                        Warehouse: "UK02",
-                        HandlingUnitExternalID: sHandlingUnit,
-                        StockItemUUID: "0f1b4d10-3dd7-1fd1-a5b0-846b8fa3d63a",
-                        HandlingUnitQuantity: 1,
-                        HandlingUnitQuantityUnit: "PC",
-                        HandlingUnitAltUnitOfMeasure: "PC",
-                        HandlingUnitReferenceDocument: "180000024",
-                        HandlingUnitRefDocumentItem: "0000000010"
-                    }
-                ]
+                StorageBin: GR_STORAGE_BIN,
+                _HandlingUnitItem: aItems.map(function (oItem) {
+                    return {
+                        Warehouse: WAREHOUSE,
+                        HandlingUnitExternalID: sHandlingUnit || "",
+                        StockItemUUID: oItem.stockItemUUID,
+                        HandlingUnitQuantity: Number(oItem.quantity) || 0,
+                        HandlingUnitQuantityUnit: oItem.unit,
+                        HandlingUnitAltUnitOfMeasure: oItem.unit,
+                        // the delivery without, the item with leading zeros, e.g. 180000024 and 0000000010
+                        HandlingUnitReferenceDocument: itemNumber(oItem.delivery),
+                        HandlingUnitRefDocumentItem: String(itemNumber(oItem.item)).padStart(10, "0")
+                    };
+                })
             }, { "x-operation": "CREATE_HU" });
         }
     };

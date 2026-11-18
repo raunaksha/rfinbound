@@ -50,14 +50,13 @@ sap.ui.define([], function () {
         },
 
         /**
-         * Reads the batches of a product in a plant.
+         * Reads the batches of a product, of all plants, as batches are kept at material level.
          * @param {sap.ui.model.odata.v4.ODataModel} oModel The product batch service model.
          * @param {string} sProduct The product.
-         * @param {string} sPlant The plant.
-         * @returns {Promise<string[]>} The batch numbers.
+         * @returns {Promise<string[]>} The batch numbers, each one once.
          */
-        readBatches: function (oModel, sProduct, sPlant) {
-            var sFilter = "Product eq " + literal(sProduct) + " and plant eq " + literal(sPlant);
+        readBatches: function (oModel, sProduct) {
+            var sFilter = "Product eq " + literal(sProduct);
             var sUrl = oModel.getServiceUrl() + "Product_Batch?$filter=" + encodeURIComponent(sFilter);
 
             return fetch(sUrl, {
@@ -71,7 +70,10 @@ sap.ui.define([], function () {
             }).then(function (oData) {
                 return (oData.value || []).map(function (oBatch) {
                     return oBatch.batch;
-                }).filter(Boolean);
+                }).filter(function (sBatch, iIndex, aBatches) {
+                    // a batch may come once per plant
+                    return sBatch && aBatches.indexOf(sBatch) === iIndex;
+                });
             });
         },
 

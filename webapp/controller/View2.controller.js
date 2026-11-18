@@ -393,7 +393,7 @@ sap.ui.define([
             return (toInteger(vQuantity) + " " + (sUnit || "")).trim();
         },
 
-        // the batch value help lists the batches of the product in the plant of its delivery item
+        // the batch value help lists the batches of the product, of all plants
         onBatchValueHelp() {
             const oModel = this.getView().getModel("view");
             const sProduct = (oModel.getProperty("/product") || "").trim();
@@ -412,7 +412,7 @@ sap.ui.define([
                 oDialog.getBinding("items").filter([]);
                 oDialog.setBusy(true);
                 oDialog.open();
-                return this._readBatches(sProduct, oModel.getProperty("/plant") || "").then((aBatches) => {
+                return this._readBatches(sProduct).then((aBatches) => {
                     oBatches.setProperty("/items", aBatches.map((sBatch) => ({ batch: sBatch })));
                 }, (oError) => {
                     MessageBox.error(this._getText("batchReadError", [oError.message || ""]));
@@ -439,13 +439,13 @@ sap.ui.define([
             this._focus("batchInput");
         },
 
-        // the batches are read once per product and plant, for the value help and the check on save
-        _readBatches(sProduct, sPlant) {
-            const sKey = sProduct + "|" + sPlant;
+        // the batches are read once per product, for the value help and the check on save
+        _readBatches(sProduct) {
+            const sKey = product.normalize(sProduct);
             if (!this._oBatches || this._oBatches.key !== sKey) {
                 const oBatches = {
                     key: sKey,
-                    promise: product.readBatches(this.getOwnerComponent().getModel("batch"), sProduct, sPlant)
+                    promise: product.readBatches(this.getOwnerComponent().getModel("batch"), sProduct)
                 };
                 // a failed read is tried again next time
                 oBatches.promise.catch(() => {
@@ -481,7 +481,7 @@ sap.ui.define([
             const oModel = this.getView().getModel("view");
             const sBatch = (oData.batch || "").trim();
 
-            return this._readBatches(oItem.Product, oItem.Plant || "").then((aBatches) => {
+            return this._readBatches(oItem.Product).then((aBatches) => {
                 // a scanned batch that does not exist yet can be created right away, the save then goes on
                 if (sBatch && !aBatches.includes(sBatch) && !aBatches.includes(sBatch.toUpperCase())) {
                     return this._askCreateBatch(sBatch, oItem);
