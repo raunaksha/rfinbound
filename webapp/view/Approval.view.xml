@@ -34,8 +34,7 @@
                             text="{i18n>confirmAll}"
                             icon="sap-icon://accept"
                             press=".onConfirmAll"
-                            enabled="{= !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>
-                    </OverflowToolbar>
+                            enabled="{= !${view>/busy} &amp;&amp; !${view>/posting} &amp;&amp; !${view>/posted} }"/>                    </OverflowToolbar>
                 </headerToolbar>
                 <columns>
                     <Column id="colProduct">
@@ -99,7 +98,7 @@
                             <CheckBox id="entryHuFlag" selected="{= ${view>HuFlag} === 'X' }" displayOnly="true"/>
                             <Text id="entryHu" text="{view>HandlingUnit}"/>
                             <Text id="entryPackMaterial" text="{view>PackagingMaterial}"/>
-                            <ObjectNumber id="entryQuantity" number="{view>Quantity}" unit="{view>QuantityUOM}"/>
+                            <ObjectNumber id="entryQuantity" number="{ path: 'view>Quantity', formatter: '.formatQuantity' }" unit="{view>QuantityUOM}"/>
                             <Text id="entryConfirmedBy" text="{view>ReceivingConfirmationBy}"/>
                             <Text id="entryGrNumber" text="{view>GoodsReceiptNo}"/>
                             <Text id="entryGrDoneBy" text="{view>GoodsReceiptDoneBy}"/>

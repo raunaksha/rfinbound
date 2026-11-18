@@ -82,6 +82,13 @@ sap.ui.define([
             return !!String(sGoodsReceiptNo || "").trim().replace(/^0+/, "");
         },
 
+        // quantities are whole pieces, so decimals from the backend (e.g. 1.000) are shown as 1
+        formatQuantity(vQuantity) {
+            const fQuantity = Number(vQuantity);
+            return vQuantity === "" || vQuantity === null || vQuantity === undefined || !isFinite(fQuantity)
+                ? "" : String(Math.round(fQuantity));
+        },
+
         formatStatusText(sReceivingComplete, sGoodsReceiptDoneBy, sGoodsReceiptNo) {
             if (this.formatPosted(sGoodsReceiptDoneBy, sGoodsReceiptNo)) {
                 return this._getText("posted");

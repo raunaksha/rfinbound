@@ -47,15 +47,24 @@ sap.ui.define([], function () {
         }).join("\n");
     }
 
-    // the service may only say "API modification failed", the EWM error and its details come as JSON text in Response
+    // the service may only say "API modification failed", the real error comes in Response, either as JSON text
+    // with the EWM error and its details or as plain text, e.g. "Batch 0000000100 already exists for material X"
     function errorMessage(oResult) {
+        var sResponse = String(field(oResult, "Response") || "").trim();
         var oError;
         try {
-            oError = JSON.parse(field(oResult, "Response")).error;
+            oError = JSON.parse(sResponse).error;
         } catch {
             oError = null;
         }
-        return oError && oError.message ? messages(oError) : field(oResult, "Message");
+        if (oError && oError.message) {
+            return messages(oError);
+        }
+        // plain text, or JSON without an error message, is shown as it is
+        if (sResponse && !oError && !/^[{[]/.test(sResponse)) {
+            return sResponse;
+        }
+        return field(oResult, "Message") || sResponse;
     }
 
     function failed(oResult) {
@@ -206,17 +215,20 @@ sap.ui.define([], function () {
          * @param {string} sMaterial The material.
          * @param {string} sPlant The plant, may be empty.
          * @param {string} sBatch The batch number.
-         * @param {Date|string} vShelfLifeExpiry The shelf life expiry date, a Date or YYYY-MM-DD.
+         * @param {Date|string} [vShelfLifeExpiry] The shelf life expiry date, a Date or YYYY-MM-DD; left out when empty.
          * @returns {Promise<object>} The service's answer.
          */
         createBatch: function (oComponent, sMaterial, sPlant, sBatch, vShelfLifeExpiry) {
-            return send(oComponent, {
+            var mValues = {
                 Operation: literal("CREATE_BATCH"),
                 Material: literal(sMaterial),
                 Plant: literal(sPlant),
-                Batch: literal(sBatch),
-                ShelfLifeExpiry: dateLiteral(vShelfLifeExpiry)
-            });
+                Batch: literal(sBatch)
+            };
+            if (vShelfLifeExpiry) {
+                mValues.ShelfLifeExpiry = dateLiteral(vShelfLifeExpiry);
+            }
+            return send(oComponent, mValues);
         },
 
         /**

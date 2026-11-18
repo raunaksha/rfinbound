@@ -80,14 +80,17 @@
                         type="Number"
                         description="{view>/unit}"
                         value="{view>/quantity}"
+                        liveChange=".onQuantityLiveChange"
                         valueState="{view>/quantityState}"
                         valueStateText="{i18n>quantityRequired}"/>
 
                     <Label id="serialNumberLabel" text="{i18n>serialNumber}" required="{= !!${view>/serialProfile} }"/>
                     <Input id="serialNumberInput"
-                        value="{ path: 'view>/serialNumbers', formatter: '.formatSerialNumbers' }"
-                        placeholder="{= ${view>/serialProfile} || ${view>/serialProfileBusy} || !${view>/deliveryItem} ? ${i18n>serialNumberPlaceholder} : ${i18n>serialNumberNotAllowed} }"
-                        enabled="{= !!${view>/serialProfile} }"
+                        value="{ parts: ['view>/serialNumbers', 'view>/serialProfile', 'view>/serialProfileBusy', 'view>/deliveryItem', 'items>/nonSerialised'], formatter: '.formatSerialNumbers' }"
+                        placeholder="{i18n>serialNumberPlaceholder}"
+                        editable="{= !!${view>/serialProfile} }"
+                        valueState="{ parts: ['view>/serialProfile', 'view>/serialProfileBusy', 'view>/deliveryItem', 'items>/nonSerialised'], formatter: '.formatSerialNumberState' }"
+                        showValueStateMessage="false"
                         showValueHelp="true"
                         valueHelpOnly="true"
                         valueHelpIconSrc="sap-icon://navigation-right-arrow"
@@ -103,7 +106,7 @@
                         selectedKey="{view>/packMaterial}"
                         visible="{view>/huSelected}"
                         items="{ path: 'packMat>/Packaging_Material', templateShareable: false }">
-                        <core:ListItem key="{packMat>Product}" text="{packMat>Product}" additionalText="{packMat>ProductDescription}"/>
+                        <core:ListItem id="packMaterialItem" key="{packMat>Product}" text="{packMat>Product}" additionalText="{packMat>ProductDescription}"/>
                     </ComboBox>
 
                     <Label id="huNumberLabel" text="{i18n>huNumber}" visible="{view>/huSelected}"/>
@@ -124,7 +127,7 @@
                         press=".onItemPress"
                         title="{items>Product}"
                         description="{i18n>deliveryItem} {items>InboundDeliveryItem}"
-                        info="{items>ActualDeliveryQuantity} {items>DeliveryQuantityUnit}"/>
+                        info="{ parts: ['items>ActualDeliveryQuantity', 'items>DeliveryQuantityUnit'], formatter: '.formatQuantityUnit' }"/>
                 </List>
             </Panel>
         </content>
@@ -135,6 +138,10 @@
                     type="Emphasized"
                     press=".onSave"
                     enabled="{= !${view>/saving} &amp;&amp; !${view>/grDocument} }"/>
+                <Button id="createBatchButton"
+                    text="{i18n>createBatch}"
+                    press=".onCreateBatchPress"
+                    enabled="{= !!${view>/deliveryItem} &amp;&amp; !${view>/saving} &amp;&amp; !${view>/grDocument} }"/>
                 <ToolbarSpacer id="productFooterSpacer"/>
                 <Button id="clearButton" text="{i18n>clear}" press=".onClear"/>
             </OverflowToolbar>

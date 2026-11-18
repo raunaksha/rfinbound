@@ -1,0 +1,46 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog id="createBatchDialog"
+        title="{i18n>createBatchTitle}"
+        contentWidth="22rem"
+        busy="{newBatch>/busy}"
+        afterClose=".onCreateBatchAfterClose">
+        <content>
+            <form:SimpleForm id="createBatchForm"
+                editable="true"
+                layout="ResponsiveGridLayout"
+                labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                singleContainerFullSize="false">
+                <form:content>
+                    <Label id="createBatchProductLabel" text="{i18n>product}"/>
+                    <Text id="createBatchProduct" text="{newBatch>/product}"/>
+
+                    <Label id="createBatchBatchLabel" text="{i18n>batch}" required="true" labelFor="createBatchBatchInput"/>
+                    <Input id="createBatchBatchInput"
+                        value="{newBatch>/batch}"
+                        maxLength="10"
+                        valueState="{newBatch>/batchState}"
+                        valueStateText="{i18n>createBatchBatchRequired}"
+                        submit=".onCreateBatchConfirm"/>
+
+                    <Label id="createBatchSledLabel" text="{i18n>sled}" labelFor="createBatchSledInput"/>
+                    <Input id="createBatchSledInput"
+                        value="{newBatch>/sled}"
+                        maxLength="6"
+                        placeholder="{i18n>sledFormat}"
+                        valueState="{newBatch>/sledState}"
+                        valueStateText="{i18n>createBatchSledInvalid}"
+                        submit=".onCreateBatchConfirm"/>
+                </form:content>
+            </form:SimpleForm>
+        </content>
+        <beginButton>
+            <Button id="createBatchConfirm" text="{i18n>createBatch}" type="Emphasized" press=".onCreateBatchConfirm"/>
+        </beginButton>
+        <endButton>
+            <Button id="createBatchCancel" text="{i18n>cancel}" press=".onCreateBatchCancel"/>
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>
