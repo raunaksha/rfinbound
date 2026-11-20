@@ -163,6 +163,62 @@ sap.ui.define([], function () {
         });
     }
 
+    // the delivery shows the commercial unit, e.g. PAC, but EWM expects the base unit, e.g. PAK, which the
+    // unit of measure service maps; a unit the service does not know is passed on as it is
+    var mBaseUnits = {};
+
+    function baseUnit(oComponent, sUnit) {
+        var sKey = String(sUnit || "").trim();
+        if (!sKey) {
+            return Promise.resolve(sKey);
+        }
+        if (!mBaseUnits[sKey]) {
+            var sUrl = manifestUri(oComponent, "unitOfMeasureService") + "YY1_Unit_Of_Measure("
+                + encodeURIComponent(literal(sKey)) + ")?$format=json";
+            mBaseUnits[sKey] = fetch(sUrl, {
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" }
+            }).then(function (oResponse) {
+                if (oResponse.status === 404) {
+                    return sKey;
+                }
+                return oResponse.json().catch(function () {
+                    return {};
+                }).then(function (oData) {
+                    if (!oResponse.ok) {
+                        throw new Error("Reading the base unit of " + sKey + " failed: "
+                            + ((oData.error && oData.error.message && (oData.error.message.value || oData.error.message))
+                                || oResponse.status + " " + oResponse.statusText));
+                    }
+                    return String((oData.d && oData.d.BASE_UOM) || "").trim() || sKey;
+                });
+            });
+            // a failed read is tried again next time
+            mBaseUnits[sKey].catch(function () {
+                delete mBaseUnits[sKey];
+            });
+        }
+        return mBaseUnits[sKey];
+    }
+
+    function handlingUnitItems(oComponent, sHandlingUnit, aItems) {
+        return Promise.all(aItems.map(function (oItem) {
+            return baseUnit(oComponent, oItem.unit).then(function (sUnit) {
+                return {
+                    Warehouse: WAREHOUSE,
+                    HandlingUnitExternalID: sHandlingUnit || "",
+                    StockItemUUID: oItem.stockItemUUID,
+                    HandlingUnitQuantity: Number(oItem.quantity) || 0,
+                    HandlingUnitQuantityUnit: sUnit,
+                    HandlingUnitAltUnitOfMeasure: sUnit,
+                    // the delivery without, the item with leading zeros, e.g. 180000024 and 0000000010
+                    HandlingUnitReferenceDocument: itemNumber(oItem.delivery),
+                    HandlingUnitRefDocumentItem: String(itemNumber(oItem.item)).padStart(10, "0")
+                };
+            });
+        }));
+    }
+
     return {
         /**
          * Writes quantity, unit and batch to an EWM inbound delivery item.
@@ -173,13 +229,15 @@ sap.ui.define([], function () {
          * @returns {Promise<object>} The service's answer.
          */
         updateItem: function (oComponent, sDelivery, sItem, oValues) {
-            return send(oComponent, {
-                Operation: literal("UPDATE_ITEM"),
-                EwmDelivery: literal(deliveryNumber(sDelivery)),
-                EwmItem: literal(itemNumber(sItem)),
-                ProductQuantity: String(Number(oValues.quantity) || 0),
-                QuantityUnit: literal(oValues.unit),
-                Batch: literal(oValues.batch)
+            return baseUnit(oComponent, oValues.unit).then(function (sUnit) {
+                return send(oComponent, {
+                    Operation: literal("UPDATE_ITEM"),
+                    EwmDelivery: literal(deliveryNumber(sDelivery)),
+                    EwmItem: literal(itemNumber(sItem)),
+                    ProductQuantity: String(Number(oValues.quantity) || 0),
+                    QuantityUnit: literal(sUnit),
+                    Batch: literal(oValues.batch)
+                });
             });
         },
 
@@ -277,34 +335,43 @@ sap.ui.define([], function () {
         },
 
         /**
-         * Creates a handling unit in the GR area of warehouse UK02 and packs the received stock into it.
+         * Creates a handling unit in the GR area of warehouse UK02, empty or with the received stock packed into it.
          * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
          * @param {string} sPackagingMaterial The pack material.
          * @param {string} sHandlingUnit The HU number, empty to let the system number it.
+         * @param {{stockItemUUID: string, quantity: number, unit: string, delivery: string, item: string}[]} [aItems]
+         *     The stock to pack, with the inbound delivery item it was received with; empty for an empty HU.
+         * @returns {Promise<object>} The service's answer, with the HU number in HandlingUnitExternalID.
+         */
+        createHandlingUnit: function (oComponent, sPackagingMaterial, sHandlingUnit, aItems) {
+            return handlingUnitItems(oComponent, sHandlingUnit, aItems || []).then(function (aHuItems) {
+                return post(oComponent, "handlingUnitCreateService", {
+                    Warehouse: WAREHOUSE,
+                    HandlingUnitExternalID: sHandlingUnit || "",
+                    PackagingMaterial: sPackagingMaterial,
+                    StorageBin: GR_STORAGE_BIN,
+                    _HandlingUnitItem: aHuItems
+                }, { "x-operation": "CREATE_HU" });
+            });
+        },
+
+        /**
+         * Packs the received stock into a handling unit that was created before, when the item was saved.
+         * @param {sap.ui.core.UIComponent} oComponent The app component, for the service URLs.
+         * @param {string} sHandlingUnit The HU number.
          * @param {{stockItemUUID: string, quantity: number, unit: string, delivery: string, item: string}[]} aItems
          *     The stock to pack, with the inbound delivery item it was received with.
          * @returns {Promise<object>} The service's answer.
          */
-        createHandlingUnit: function (oComponent, sPackagingMaterial, sHandlingUnit, aItems) {
-            return post(oComponent, "handlingUnitCreateService", {
-                Warehouse: WAREHOUSE,
-                HandlingUnitExternalID: sHandlingUnit || "",
-                PackagingMaterial: sPackagingMaterial,
-                StorageBin: GR_STORAGE_BIN,
-                _HandlingUnitItem: aItems.map(function (oItem) {
-                    return {
-                        Warehouse: WAREHOUSE,
-                        HandlingUnitExternalID: sHandlingUnit || "",
-                        StockItemUUID: oItem.stockItemUUID,
-                        HandlingUnitQuantity: Number(oItem.quantity) || 0,
-                        HandlingUnitQuantityUnit: oItem.unit,
-                        HandlingUnitAltUnitOfMeasure: oItem.unit,
-                        // the delivery without, the item with leading zeros, e.g. 180000024 and 0000000010
-                        HandlingUnitReferenceDocument: itemNumber(oItem.delivery),
-                        HandlingUnitRefDocumentItem: String(itemNumber(oItem.item)).padStart(10, "0")
-                    };
-                })
-            }, { "x-operation": "CREATE_HU" });
+        packHandlingUnit: function (oComponent, sHandlingUnit, aItems) {
+            return handlingUnitItems(oComponent, sHandlingUnit, aItems).then(function (aHuItems) {
+                return post(oComponent, "handlingUnitCreateService", {
+                    Warehouse: WAREHOUSE,
+                    HandlingUnitExternalID: sHandlingUnit,
+                    StorageBin: GR_STORAGE_BIN,
+                    _HandlingUnitItem: aHuItems
+                }, { "x-operation": "PACK_HU" });
+            });
         }
     };
 });

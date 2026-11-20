@@ -237,8 +237,9 @@ sap.ui.define([
             return Object.values(mItems);
         },
 
-        // the entries with the HU box ticked are packed after the goods receipt: entries with the same HU number
-        // go into one HU, entries without HU number get one HU per delivery item and pack material, numbered by the system
+        // the entries with the HU box ticked are packed after the goods receipt: the HU is created empty when the
+        // item is saved, so entries with the same HU number are packed into that HU; entries without HU number
+        // (saved before HUs were created on save) get one new HU per delivery item and pack material, numbered by the system
         _groupHandlingUnits(aEntries) {
             const mHus = {};
             aEntries.filter((oEntry) => oEntry.HuFlag === "X").forEach((oEntry) => {
@@ -272,7 +273,8 @@ sap.ui.define([
             const aEntries = aIndexes.map((iIndex) => oModel.getProperty("/entries/" + iIndex));
             const aItems = this._groupByItem(aEntries);
             const aHus = this._groupHandlingUnits(aEntries);
-            const aMissing = aHus.filter((oHu) => !oHu.packMaterial);
+            // the pack material is only needed for HUs still to be created; the others exist already
+            const aMissing = aHus.filter((oHu) => !oHu.hu && !oHu.packMaterial);
             if (aMissing.length) {
                 MessageBox.error(this._getText("huPackMaterialMissing", [aMissing.map((oHu) =>
                     oHu.hu || oHu.items.map((oItem) => oItem.item).join(", ")).join(", ")]));
@@ -429,8 +431,9 @@ sap.ui.define([
             oModel.setProperty("/posting", false);
         },
 
-        // packs the received stock into one handling unit after the other; a failed HU does not stop the others,
-        // as the goods receipt is posted already. Resolves with the number of failed HUs.
+        // packs the received stock into one handling unit after the other, into the HU created on save or, without
+        // HU number, into a new one; a failed HU does not stop the others, as the goods receipt is posted already.
+        // Resolves with the number of failed HUs.
         async _createHandlingUnits(sDelivery, aHus, iFirstStep) {
             const oComponent = this.getOwnerComponent();
             let iFailed = 0;
@@ -438,7 +441,8 @@ sap.ui.define([
             for (let iHu = 0; iHu < aHus.length; iHu++) {
                 const oHu = aHus[iHu];
                 const iStep = iFirstStep + iHu;
-                this._setStep(iStep, { status: "running" }, this._getText("postGrProgressCreatingHu", [this._huTitle(oHu)]));
+                this._setStep(iStep, { status: "running" }, this._getText(oHu.hu ? "postGrProgressPackingHu"
+                    : "postGrProgressCreatingHu", [this._huTitle(oHu)]));
                 try {
                     const aItems = [];
                     for (const oItem of oHu.items) {
@@ -450,7 +454,9 @@ sap.ui.define([
                         }
                         aItems.push(Object.assign({ stockItemUUID: sStockItemUUID, delivery: sDelivery }, oItem));
                     }
-                    const oResult = await ewmOperations.createHandlingUnit(oComponent, oHu.packMaterial, oHu.hu, aItems);
+                    const oResult = oHu.hu
+                        ? await ewmOperations.packHandlingUnit(oComponent, oHu.hu, aItems)
+                        : await ewmOperations.createHandlingUnit(oComponent, oHu.packMaterial, "", aItems);
                     const sCreated = oHu.hu || (oResult && oResult.HandlingUnitExternalID) || "";
                     this._setStep(iStep, {
                         status: "done",
@@ -460,7 +466,7 @@ sap.ui.define([
                     iFailed++;
                     this._setStep(iStep, {
                         status: "error",
-                        description: this._getText("huCreateError", [oError.message || ""])
+                        description: this._getText(oHu.hu ? "huPackError" : "huCreateError", [oError.message || ""])
                     });
                 }
                 this._advanceProgress();

@@ -743,11 +743,64 @@ sap.ui.define([
                 MessageBox.error(this._getText("grCheckError", [oError.message || ""]));
                 return false;
             }).then((bValid) => {
-                if (bValid) {
+                return bValid && this._ensureHandlingUnit(oData, oItem);
+            }).then((bReady) => {
+                if (bReady) {
                     this._saveEntries(oData, oItem);
                 } else {
                     oModel.setProperty("/saving", false);
                 }
+            });
+        },
+
+        // with the HU box ticked the empty handling unit is created on save, so its number is known right away;
+        // the received stock is packed into it when the goods receipt is posted. An HU already created for the
+        // delivery (same HU number, or for the same item and pack material without number) is reused.
+        // Resolves with true when the entries can be saved, the HU number is then in /hu.
+        _ensureHandlingUnit(oData, oItem) {
+            const oModel = this.getView().getModel("view");
+            if (!oData.huSelected) {
+                return Promise.resolve(true);
+            }
+            const sPackMaterial = (oData.packMaterial || "").trim();
+            if (!sPackMaterial) {
+                MessageBox.error(this._getText("huPackMaterialRequired"));
+                return Promise.resolve(false);
+            }
+            const sHu = (oData.hu || "").trim();
+            const sItem = rfHuInbound.itemNumber(oItem.InboundDeliveryItem);
+            this._oCreatedHus = this._oCreatedHus || new Set();
+
+            return rfHuInbound.readEntries(this.getOwnerComponent().getModel("rfhu"), oData.delivery).then((aContexts) => {
+                const aEntries = aContexts.map((oContext) => oContext.getObject());
+                const oExisting = aEntries.find((oEntry) => {
+                    const sEntryHu = (oEntry.HandlingUnit || "").trim();
+                    if (!sEntryHu || oEntry.HuFlag !== "X") {
+                        return false;
+                    }
+                    return sHu ? sEntryHu === sHu
+                        : rfHuInbound.itemNumber(oEntry.InboundDeliveryItem) === sItem
+                            && (oEntry.PackagingMaterial || "").trim() === sPackMaterial
+                            && !String(oEntry.GoodsReceiptNo || "").trim().replace(/^0+/, "");
+                });
+                if (oExisting || (sHu && this._oCreatedHus.has(sHu))) {
+                    return sHu || oExisting.HandlingUnit.trim();
+                }
+                return ewmOperations.createHandlingUnit(this.getOwnerComponent(), sPackMaterial, sHu).then((oResult) => {
+                    const sCreated = sHu || String((oResult && oResult.HandlingUnitExternalID) || "").trim();
+                    if (!sCreated) {
+                        throw new Error(this._getText("huNumberNotReturned"));
+                    }
+                    // remembered, so a save that fails after the HU was created does not create it again
+                    this._oCreatedHus.add(sCreated);
+                    return sCreated;
+                });
+            }).then((sCreated) => {
+                oModel.setProperty("/hu", sCreated);
+                return true;
+            }, (oError) => {
+                MessageBox.error(this._getText("huCreateError", [oError.message || ""]));
+                return false;
             });
         },
 
@@ -756,7 +809,7 @@ sap.ui.define([
         _saveEntries(oData, oItem) {
             const oModel = this.getView().getModel("view");
             if (!oData.serialNumbers.length) {
-                this._createEntries(oData, oItem, []);
+                this._replaceEntries(oData, oItem);
                 return;
             }
             rfHuInbound.readEntries(this.getOwnerComponent().getModel("rfhu"), oData.delivery, oItem.InboundDeliveryItem)
@@ -800,6 +853,20 @@ sap.ui.define([
                 });
         },
 
+        // an item without serial numbers is stored as one entry, so saving it again replaces the entries saved
+        // before instead of adding another line; posted entries cannot be replaced and are kept
+        _replaceEntries(oData, oItem) {
+            rfHuInbound.readEntries(this.getOwnerComponent().getModel("rfhu"), oData.delivery, oItem.InboundDeliveryItem)
+                .then((aContexts) => {
+                    const aReplaced = aContexts.filter((oContext) =>
+                        !String(oContext.getProperty("GoodsReceiptNo") || "").trim().replace(/^0+/, ""));
+                    this._createEntries(oData, oItem, [], aReplaced);
+                }, (oError) => {
+                    this.getView().getModel("view").setProperty("/saving", false);
+                    MessageBox.error(this._getText("entriesReadError", [oError.message || ""]));
+                });
+        },
+
         // aReplaced are the entries saved before, which are rejected (deleted) once the new ones are stored
         _createEntries(oData, oItem, aSerialNumbers, aReplaced) {
             const oModel = this.getView().getModel("view");
@@ -824,13 +891,19 @@ sap.ui.define([
             rfHuInbound.createEntries(this.getOwnerComponent().getModel("rfhu"), aEntries).then(() => {
                 // the previous entries are deleted only after the new ones are stored, so nothing is lost on a failed save
                 if (!(aReplaced && aReplaced.length)) {
-                    MessageToast.show(this._getText("itemSaved", [oItem.Product, oData.delivery]));
+                    MessageToast.show(oEntry.HandlingUnit
+                        ? this._getText("itemSavedWithHu", [oItem.Product, oData.delivery, oEntry.HandlingUnit])
+                        : this._getText("itemSaved", [oItem.Product, oData.delivery]));
                     return undefined;
                 }
+                const bSerials = aSerialNumbers.length > 0;
                 return rfHuInbound.deleteEntries(aReplaced).then(() => {
-                    MessageToast.show(this._getText("serialNumbersReplaced", [aReplaced.length, oItem.Product]));
+                    MessageToast.show(bSerials
+                        ? this._getText("serialNumbersReplaced", [aReplaced.length, oItem.Product])
+                        : this._getText("itemReplaced", [oItem.Product, oData.delivery]));
                 }, (oError) => {
-                    MessageBox.error(this._getText("serialNumbersReplaceError", [oError.message || ""]));
+                    MessageBox.error(this._getText(bSerials ? "serialNumbersReplaceError" : "itemReplaceError",
+                        [oError.message || ""]));
                 });
             }).then(() => {
                 oModel.setProperty("/saving", false);
