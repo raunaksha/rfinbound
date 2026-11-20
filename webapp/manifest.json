@@ -53,13 +53,6 @@
       "handlingUnitCreateService": {
         "uri": "/sap/bc/http/sap/zhu_create",
         "type": "JSON"
-      },
-      "unitOfMeasureService": {
-        "uri": "/sap/opu/odata/sap/YY1_UNIT_OF_MEASURE_CDS/",
-        "type": "OData",
-        "settings": {
-          "odataVersion": "2.0"
-        }
       }
     },
     "crossNavigation": {

@@ -71,6 +71,26 @@ sap.ui.define([], function () {
         return field(oResult, "Message") || sResponse;
     }
 
+    // the service wraps the EWM answer: Success, HttpStatus and Message, with the entity itself, e.g. the
+    // handling unit with its number in HandlingUnitExternalID, as JSON text in Response; its fields are
+    // merged into the result, so callers read them directly
+    function unwrap(oResult) {
+        var vResponse = field(oResult, "Response");
+        var oEntity = null;
+        if (vResponse && typeof vResponse === "object") {
+            oEntity = vResponse;
+        } else {
+            try {
+                oEntity = JSON.parse(String(vResponse || "").trim());
+            } catch {
+                oEntity = null;
+            }
+        }
+        return oEntity && typeof oEntity === "object" && !Array.isArray(oEntity)
+            ? Object.assign({}, oResult, oEntity)
+            : oResult;
+    }
+
     function failed(oResult) {
         var vSuccess = field(oResult, "Success");
         return vSuccess === false || vSuccess === "" || String(vSuccess).toLowerCase() === "false"
@@ -158,13 +178,13 @@ sap.ui.define([], function () {
                 if (!oResponse.ok || failed(oResult)) {
                     throw new Error(errorMessage(oResult) || oResponse.status + " " + oResponse.statusText);
                 }
-                return oResult;
+                return unwrap(oResult);
             });
         });
     }
 
-    // the delivery shows the commercial unit, e.g. PAC, but EWM expects the base unit, e.g. PAK, which the
-    // unit of measure service maps; a unit the service does not know is passed on as it is
+    // the delivery shows the alternative unit, e.g. PAC, but EWM expects the base unit, e.g. PAK, which
+    // Product_UOM maps; a unit it does not know is passed on as it is
     var mBaseUnits = {};
 
     function baseUnit(oComponent, sUnit) {
@@ -173,24 +193,23 @@ sap.ui.define([], function () {
             return Promise.resolve(sKey);
         }
         if (!mBaseUnits[sKey]) {
-            var sUrl = manifestUri(oComponent, "unitOfMeasureService") + "YY1_Unit_Of_Measure("
-                + encodeURIComponent(literal(sKey)) + ")?$format=json";
+            var sUrl = manifestUri(oComponent, "mainService") + "Product_UOM?$filter="
+                + encodeURIComponent("Alternative_uom eq " + literal(sKey));
             mBaseUnits[sKey] = fetch(sUrl, {
                 credentials: "same-origin",
                 headers: { "Accept": "application/json" }
             }).then(function (oResponse) {
-                if (oResponse.status === 404) {
-                    return sKey;
-                }
                 return oResponse.json().catch(function () {
                     return {};
                 }).then(function (oData) {
                     if (!oResponse.ok) {
                         throw new Error("Reading the base unit of " + sKey + " failed: "
-                            + ((oData.error && oData.error.message && (oData.error.message.value || oData.error.message))
-                                || oResponse.status + " " + oResponse.statusText));
+                            + ((oData.error && messages(oData.error)) || oResponse.status + " " + oResponse.statusText));
                     }
-                    return String((oData.d && oData.d.BASE_UOM) || "").trim() || sKey;
+                    var oRow = (oData.value || []).find(function (oCandidate) {
+                        return String(oCandidate.base_uom || "").trim();
+                    });
+                    return oRow ? String(oRow.base_uom).trim() : sKey;
                 });
             });
             // a failed read is tried again next time

@@ -853,22 +853,49 @@ sap.ui.define([
                 });
         },
 
-        // an item without serial numbers is stored as one entry, so saving it again replaces the entries saved
-        // before instead of adding another line; posted entries cannot be replaced and are kept
+        // an item without serial numbers saved before is either replaced by the entered quantity or the entered
+        // quantity is added to it as another entry, which the approval sums up per item; posted entries cannot
+        // be replaced and are kept
         _replaceEntries(oData, oItem) {
+            const oModel = this.getView().getModel("view");
             rfHuInbound.readEntries(this.getOwnerComponent().getModel("rfhu"), oData.delivery, oItem.InboundDeliveryItem)
                 .then((aContexts) => {
                     const aReplaced = aContexts.filter((oContext) =>
                         !String(oContext.getProperty("GoodsReceiptNo") || "").trim().replace(/^0+/, ""));
-                    this._createEntries(oData, oItem, [], aReplaced);
+                    if (!aReplaced.length) {
+                        this._createEntries(oData, oItem, []);
+                        return;
+                    }
+                    const sSaved = toInteger(aReplaced.reduce((fSum, oContext) =>
+                        fSum + (Number(oContext.getProperty("Quantity")) || 0), 0));
+                    const sEntered = toInteger(oData.quantity);
+                    const sTotal = toInteger(Number(sSaved) + Number(sEntered));
+                    const sReplace = this._getText("quantityReplacePrevious");
+                    const sAdd = this._getText("quantityAddToExisting");
+                    MessageBox.confirm(this._getText("quantityPreviousQuestion",
+                        [oItem.Product, sSaved, oData.unit || "", sEntered, sTotal]), {
+                        title: this._getText("quantityPreviousTitle"),
+                        actions: [sReplace, sAdd, MessageBox.Action.CANCEL],
+                        emphasizedAction: sReplace,
+                        onClose: (sAction) => {
+                            if (sAction === sAdd) {
+                                this._createEntries(oData, oItem, [], undefined, sTotal);
+                            } else if (sAction === sReplace) {
+                                this._createEntries(oData, oItem, [], aReplaced);
+                            } else {
+                                oModel.setProperty("/saving", false);
+                            }
+                        }
+                    });
                 }, (oError) => {
                     this.getView().getModel("view").setProperty("/saving", false);
                     MessageBox.error(this._getText("entriesReadError", [oError.message || ""]));
                 });
         },
 
-        // aReplaced are the entries saved before, which are rejected (deleted) once the new ones are stored
-        _createEntries(oData, oItem, aSerialNumbers, aReplaced) {
+        // aReplaced are the entries saved before, which are rejected (deleted) once the new ones are stored;
+        // sAddedTotal is the item's quantity after the entered one was added to the quantity saved before
+        _createEntries(oData, oItem, aSerialNumbers, aReplaced, sAddedTotal) {
             const oModel = this.getView().getModel("view");
             const oEntry = {
                 InboundDelivery: rfHuInbound.deliveryNumber(oData.delivery),
@@ -891,7 +918,9 @@ sap.ui.define([
             rfHuInbound.createEntries(this.getOwnerComponent().getModel("rfhu"), aEntries).then(() => {
                 // the previous entries are deleted only after the new ones are stored, so nothing is lost on a failed save
                 if (!(aReplaced && aReplaced.length)) {
-                    MessageToast.show(oEntry.HandlingUnit
+                    MessageToast.show(sAddedTotal
+                        ? this._getText("quantityAdded", [oItem.Product, oData.delivery, sAddedTotal, oData.unit || ""])
+                        : oEntry.HandlingUnit
                         ? this._getText("itemSavedWithHu", [oItem.Product, oData.delivery, oEntry.HandlingUnit])
                         : this._getText("itemSaved", [oItem.Product, oData.delivery]));
                     return undefined;
